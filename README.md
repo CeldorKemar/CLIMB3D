@@ -52,12 +52,16 @@ La démo locale fournit `alice@climbed.local` (admin client), `bob@climbed.local
 
 1. Choisir une salle, puis ajouter ou sélectionner un pan ; régler ses dimensions, position et inclinaison. L’assistant d’assemblage raccorde plusieurs segments : la longueur se mesure le long du pan, ses projections donnent la hauteur et la profondeur.
 2. Choisir une prise ou un volume disponible dans la bibliothèque, puis cliquer sur le mur. Le même modèle reste actif pour les placements suivants. Échap revient à la sélection. Contacts, intersections et empreintes dépassant le pan sont refusés.
-3. Régler position et rotation dans la salle. Le catalogue séparé permet de renseigner les formes, dimensions et couleurs des modèles, puis de revenir à la salle sans perdre le brouillon. Un nouveau modèle commence sans stock ; un administrateur ou responsable déclare explicitement la quantité physique avant placement.
+3. Régler position et rotation dans la salle. L’icône de bibliothèque dans le menu tout à gauche ouvre le catalogue séparé, avec onglets prises/volumes et recherche libre. On y renseigne les formes, dimensions et couleurs, puis on revient à la salle sans perdre le brouillon. Un nouveau modèle commence sans stock ; un administrateur ou responsable déclare explicitement la quantité physique avant placement.
 4. Créer des voies, associer les mêmes prises ou volumes à plusieurs voies et choisir les voies visibles. Sauvegarder la salle, ou nommer une sauvegarde de voie ; l’historique permet une restauration vérifiée contre les collisions et le stock. Une restauration ne confirme aucun mouvement physique.
 5. Dans le matériel, choisir le périmètre de pans à réserver. Le check-in réserve avant le retrait ; confirmer ensuite retrait et installation.
 6. Pour libérer le matériel installé, demander son retrait puis confirmer démontage et retour. Une annulation après prélèvement ne libère pas le stock prématurément.
 
 Le catalogue de ce POC reste attaché au document de salle ; la bibliothèque centrale partagée entre toutes les salles du client reste à réaliser. Les pans assemblés sont raccordés à leur création, sans liaison de contrainte permanente pendant les retouches ultérieures. Les profils fabricant vérifiés ne sont pas fournis : les consultations sont encore bloquées par le réseau, voir [la recherche](docs/research.md).
+
+Sur une sélection de salle : **Suppr** ou **Retour arrière** supprime, **Ctrl+C / Ctrl+V** copie et colle, **Ctrl+D** duplique, **Ctrl+Z** annule. Les copies d’un pan incluent ses volumes, prises et associations de voies ; elles respectent le stock et les collisions. Le presse-papiers reste local à cette salle et les champs de saisie conservent leurs raccourcis natifs. L’assistant de murs affiche les raisons détaillées d’un refus, sans ajouter de segments partiels.
+
+L’étude [Fixations et conséquences pour Climbed](docs/fixations.md) distingue les mécanismes de montage et la proposition à valider. Elle ne constitue pas une notice fournisseur : aucun nouveau mode de fixation contraint n’est activé à ce stade.
 
 Les profils de fixation sont génériques et non certifiés ; aucun résultat du logiciel ne valide mécaniquement une installation réelle.
 

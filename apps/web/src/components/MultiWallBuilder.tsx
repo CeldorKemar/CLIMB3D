@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { createWallChain } from "@climbed/geometry";
 import type { SceneDocument, Vec3, WallDefinition } from "@climbed/contracts";
@@ -6,7 +6,7 @@ import { NumberField } from "./Fields";
 interface Props {
   scene: SceneDocument;
   onClose: () => void;
-  onApply: (walls: WallDefinition[]) => boolean;
+  onApply: (walls: WallDefinition[]) => { ok: boolean; problems: string[] };
 }
 export function MultiWallBuilder({ scene, onClose, onApply }: Props) {
   const last = scene.walls.at(-1)!;
@@ -23,7 +23,19 @@ export function MultiWallBuilder({ scene, onClose, onApply }: Props) {
     { length: 1, inclination: 30 },
     { length: 1, inclination: 0 },
   ]);
-  const [error, setError] = useState("");
+  const [problems, setProblems] = useState<string[]>([]);
+  const problemsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!problems.length) return;
+    problemsRef.current?.focus({ preventScroll: true });
+    problemsRef.current?.scrollIntoView({ block: "nearest" });
+  }, [problems]);
+  useEffect(() => setProblems([]), [name, width, yaw, origin, segments]);
+  function showProblems(messages: string[]) {
+    setProblems([
+      ...new Set(messages.map((message) => message.trim()).filter(Boolean)),
+    ]);
+  }
   const profile = useMemo(() => {
     let y = 0,
       z = 0;
@@ -195,9 +207,20 @@ export function MultiWallBuilder({ scene, onClose, onApply }: Props) {
             <p>Les prises et volumes se placent ensuite sur chaque segment.</p>
           </aside>
         </div>
-        {error && (
-          <div className="error-banner" role="alert">
-            {error}
+        {problems.length > 0 && (
+          <div
+            ref={problemsRef}
+            className="error-banner chain-validation-errors"
+            role="alert"
+            data-testid="chain-problems"
+            tabIndex={-1}
+          >
+            <p>La création du mur est bloquée :</p>
+            <ul>
+              {problems.map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
           </div>
         )}
         <div className="chain-actions">
@@ -210,7 +233,7 @@ export function MultiWallBuilder({ scene, onClose, onApply }: Props) {
             onClick={() => {
               try {
                 if (!name.trim()) throw new Error("Nommez cet ensemble.");
-                const accepted = onApply(
+                const result = onApply(
                   createWallChain({
                     origin,
                     width,
@@ -224,13 +247,21 @@ export function MultiWallBuilder({ scene, onClose, onApply }: Props) {
                     angleMode: "absolute",
                   }),
                 );
-                if (accepted) onClose();
-                else
-                  setError(
-                    "Les segments ne peuvent pas être ajoutés. Vérifiez les contraintes indiquées.",
-                  );
+                if (result.ok) onClose();
+                else showProblems(result.problems);
               } catch (e) {
-                setError((e as Error).message);
+                const messages =
+                  e &&
+                  typeof e === "object" &&
+                  "problems" in e &&
+                  Array.isArray(e.problems)
+                    ? e.problems.map(String)
+                    : [
+                        e instanceof Error
+                          ? e.message
+                          : "La création du mur a échoué. Aucun segment n’a été ajouté.",
+                      ];
+                showProblems(messages);
               }
             }}
           >

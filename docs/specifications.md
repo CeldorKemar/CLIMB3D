@@ -79,6 +79,14 @@ Une version projetée et une version installée peuvent coexister. Modifier le p
 
 La recherche de fiches fabricant et de forums a été renouvelée. Les refus réseau et les informations encore inconnues sont consignés dans [research.md](research.md). Les valeurs saisies ou génériques ne deviennent pas des spécifications fournisseur par défaut.
 
+## Corrections complémentaires après la seconde recette
+
+- Le catalogue de projet filtre les prises et volumes avec deux onglets et une recherche libre extensible. Le détail des futurs filtres structurés reste à définir.
+- L’éditeur de modèles s’ouvre uniquement depuis son icône dans le menu latéral principal ; la palette de placement ne contient plus de bouton de création/édition.
+- Une sélection de pan ou d’élément accepte suppression, copie/collage et duplication au clavier. Le pan est copié avec ses enfants, sous de nouveaux identifiants, en préservant les associations avec les voies existantes. Le stock et les collisions sont contrôlés atomiquement avant ajout ; la suppression reste locale à la conception et réversible. Les champs de texte, le catalogue et les fenêtres modales ne doivent pas déclencher ces actions de salle.
+- L’assistant multi-inclinaisons affiche chaque cause de refus dans sa fenêtre, avec des noms lisibles ; aucun ajout partiel et aucune fermeture après refus.
+- Étudier la distinction entre fixation de l’objet sur son support et capacités du support à recevoir des objets, avant de modifier les règles de placement. La proposition boulonnage sur inserts / vissage sur zones autorisées et ses limites documentaires figurent dans [fixations.md](fixations.md). La décision fonctionnelle sur le placement contraint reste à obtenir après ce topo.
+
 ## V2 et exclusions
 
 La V2 doit pouvoir accueillir des modèles **scannés ou modélisés dans un logiciel 3D**. Le POC prépare un contrat de modèle compatible ; il n’implémente ni capture, ni import, ni photogrammétrie, ni reconstruction depuis une photo. La numérisation seule ne fournira pas automatiquement les informations de fixation.

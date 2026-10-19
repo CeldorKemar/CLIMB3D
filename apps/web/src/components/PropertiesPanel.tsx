@@ -1,11 +1,4 @@
-import {
-  Copy,
-  Crosshair,
-  Plus,
-  Trash2,
-  CircleHelp,
-  BookOpen,
-} from "lucide-react";
+import { Copy, Crosshair, Plus, Trash2, CircleHelp } from "lucide-react";
 import { Quaternion, Vector3 } from "three";
 import {
   getWallAngles,
@@ -27,7 +20,6 @@ interface Props {
   hiddenRouteIds: string[];
   setHiddenRouteIds: (ids: string[]) => void;
   onDuplicate: (id: string) => void;
-  onCatalog: () => void;
 }
 export function PropertiesPanel({
   scene,
@@ -39,7 +31,6 @@ export function PropertiesPanel({
   hiddenRouteIds,
   setHiddenRouteIds,
   onDuplicate,
-  onCatalog,
 }: Props) {
   const wall = scene.walls.find((w) => w.id === selected);
   const placement = scene.placements.find((p) => p.id === selected);
@@ -373,10 +364,6 @@ export function PropertiesPanel({
             Les dimensions et la couleur se définissent dans la bibliothèque,
             sans modifier les exemplaires déjà utilisés.
           </p>
-          <button className="quiet-button" onClick={onCatalog}>
-            <BookOpen size={13} />
-            Ouvrir l’éditeur de modèles
-          </button>
           <button
             className="secondary duplicate-placement"
             data-testid="placement-duplicate"

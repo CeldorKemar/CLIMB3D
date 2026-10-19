@@ -7,6 +7,7 @@ import {
   Trash2,
   Package,
   LockKeyhole,
+  Search,
 } from "lucide-react";
 import type {
   ModelDefinition,
@@ -20,16 +21,7 @@ import type { Edit } from "../domain/editor";
 import { NumberField } from "./Fields";
 import { ShapeThumbnail } from "./LibraryPanel";
 import { ModelPreview } from "./ModelPreview";
-const shapeNames: Record<ShapeKind, string> = {
-  jug: "Bac à cavité",
-  crimp: "Réglette",
-  pinch: "Pince",
-  dome: "Dôme",
-  pyramid: "Pyramide",
-  prism: "Prisme",
-  box: "Boîte",
-  scoop: "Coupelle creuse",
-};
+import { filterCatalog, shapeLabels as shapeNames } from "../domain/catalog";
 interface Props {
   scene: SceneDocument;
   room: RoomState;
@@ -50,6 +42,11 @@ export function CatalogEditor({
   canManageStock,
   declareStock,
 }: Props) {
+  const [kind, setKind] = useState<ModelDefinition["kind"]>(
+    scene.models[0]?.kind ?? "hold",
+  );
+  const [search, setSearch] = useState("");
+  const models = filterCatalog(scene.models, { kind, search });
   const [selectedId, setSelectedId] = useState(scene.models[0]?.id ?? "");
   const [draft, setDraft] = useState<ModelDefinition | null>(
     scene.models[0] ?? null,
@@ -72,6 +69,18 @@ export function CatalogEditor({
     setQuantity(inventory?.total ?? 0);
     setIssue("");
   }, [selectedId, current, inventory?.total]);
+  function changeKind(nextKind: ModelDefinition["kind"]) {
+    setKind(nextKind);
+    setSelectedId(
+      filterCatalog(scene.models, { kind: nextKind, search })[0]?.id ?? "",
+    );
+  }
+  function changeSearch(value: string) {
+    setSearch(value);
+    const matches = filterCatalog(scene.models, { kind, search: value });
+    if (!matches.some((model) => model.id === selectedId))
+      setSelectedId(matches[0]?.id ?? "");
+  }
   function create(kind: "hold" | "volume") {
     const model: ModelDefinition = {
       id: crypto.randomUUID(),
@@ -84,6 +93,8 @@ export function CatalogEditor({
       source: { type: "parametric", generatorVersion: 1 },
     };
     edit((d) => d.models.push(model));
+    setKind(kind);
+    setSearch("");
     setSelectedId(model.id);
   }
   function duplicate() {
@@ -94,6 +105,8 @@ export function CatalogEditor({
       name: `${draft.name} · variante`,
     };
     edit((d) => d.models.push(next));
+    setKind(next.kind);
+    setSearch("");
     setSelectedId(next.id);
   }
   function apply() {
@@ -155,23 +168,96 @@ export function CatalogEditor({
               Volume
             </button>
           </div>
-          {scene.models.map((m) => (
-            <button
-              className={`catalog-list-item ${selectedId === m.id ? "active" : ""}`}
-              key={m.id}
-              data-testid={`catalog-edit-${m.id}`}
-              onClick={() => setSelectedId(m.id)}
-            >
-              <ShapeThumbnail model={m} />
-              <span>
-                <strong>{m.name}</strong>
-                <small>
-                  {m.kind === "hold" ? "Prise" : "Volume"} ·{" "}
-                  {shapeNames[m.shape]}
-                </small>
-              </span>
-            </button>
-          ))}
+          <div
+            className="segmented catalog-category-tabs"
+            role="tablist"
+            aria-label="Catégories de modèles"
+          >
+            {(
+              [
+                ["hold", "Prises"],
+                ["volume", "Volumes"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                id={`catalog-tab-${value}`}
+                data-testid={`catalog-tab-${value}`}
+                role="tab"
+                aria-selected={kind === value}
+                aria-controls="catalog-filtered-list"
+                tabIndex={kind === value ? 0 : -1}
+                className={kind === value ? "active" : ""}
+                onClick={() => changeKind(value)}
+                onKeyDown={(event) => {
+                  if (
+                    !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                      event.key,
+                    )
+                  )
+                    return;
+                  event.preventDefault();
+                  const next =
+                    event.key === "Home"
+                      ? "hold"
+                      : event.key === "End"
+                        ? "volume"
+                        : kind === "hold"
+                          ? "volume"
+                          : "hold";
+                  changeKind(next);
+                  document.getElementById(`catalog-tab-${next}`)?.focus();
+                }}
+              >
+                {label}
+                <span>
+                  {scene.models.filter((model) => model.kind === value).length}
+                </span>
+              </button>
+            ))}
+          </div>
+          <label className="search-field catalog-search">
+            <Search size={14} />
+            <input
+              data-testid="catalog-search"
+              aria-label="Rechercher dans la bibliothèque"
+              placeholder="Nom, forme, code couleur…"
+              value={search}
+              onChange={(event) => changeSearch(event.target.value)}
+            />
+          </label>
+          <p className="catalog-search-help">
+            Nom, forme, code couleur (ex. #657d75) ou dimensions (m, cm, mm).
+          </p>
+          <div
+            id="catalog-filtered-list"
+            role="tabpanel"
+            aria-labelledby={`catalog-tab-${kind}`}
+          >
+            {models.map((m) => (
+              <button
+                className={`catalog-list-item ${selectedId === m.id ? "active" : ""}`}
+                key={m.id}
+                data-testid={`catalog-edit-${m.id}`}
+                onClick={() => setSelectedId(m.id)}
+              >
+                <ShapeThumbnail model={m} />
+                <span>
+                  <strong>{m.name}</strong>
+                  <small>
+                    {m.kind === "hold" ? "Prise" : "Volume"} ·{" "}
+                    {shapeNames[m.shape]}
+                  </small>
+                </span>
+              </button>
+            ))}
+            {!models.length && (
+              <p className="empty-copy" role="status">
+                Aucun {kind === "hold" ? "modèle de prise" : "modèle de volume"}{" "}
+                ne correspond à cette recherche.
+              </p>
+            )}
+          </div>
         </aside>
         {draft ? (
           <>
@@ -312,7 +398,7 @@ export function CatalogEditor({
                       d.models = d.models.filter((m) => m.id !== selectedId);
                     });
                     setSelectedId(
-                      scene.models.find((m) => m.id !== selectedId)?.id ?? "",
+                      models.find((m) => m.id !== selectedId)?.id ?? "",
                     );
                   }}
                 >
@@ -387,7 +473,13 @@ export function CatalogEditor({
             </aside>
           </>
         ) : (
-          <p className="empty-copy">Créez votre premier modèle.</p>
+          <div className="catalog-empty-stage">
+            <p className="empty-copy">
+              {search
+                ? "Aucun modèle ne correspond à cette recherche. Modifiez les mots-clés ou créez un modèle."
+                : "Sélectionnez un modèle ou créez une nouvelle prise ou un nouveau volume."}
+            </p>
+          </div>
         )}
       </div>
     </section>

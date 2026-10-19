@@ -10,6 +10,7 @@ import {
   Triangle,
 } from "lucide-react";
 import type { ModelDefinition, SceneDocument } from "@climbed/contracts";
+import { filterCatalog } from "../domain/catalog";
 export function ShapeThumbnail({ model }: { model: ModelDefinition }) {
   return (
     <span
@@ -29,7 +30,6 @@ interface Props {
   onModel: (model: ModelDefinition | undefined) => void;
   onAddWall: () => void;
   onAddChain: () => void;
-  onCatalog: () => void;
   remaining: Map<string, number>;
   totals: Map<string, number>;
 }
@@ -41,17 +41,12 @@ export function LibraryPanel({
   onModel,
   onAddWall,
   onAddChain,
-  onCatalog,
   remaining,
   totals,
 }: Props) {
   const [kind, setKind] = useState<"hold" | "volume">("hold");
   const [search, setSearch] = useState("");
-  const models = scene.models.filter(
-    (m) =>
-      m.kind === kind &&
-      m.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-  );
+  const models = filterCatalog(scene.models, { kind, search });
   return (
     <aside className="library-panel">
       <div className="panel-heading">
@@ -134,14 +129,6 @@ export function LibraryPanel({
           </span>
           <span className="shared-badge">Projet</span>
         </div>
-        <button
-          className="catalog-open-button"
-          data-testid="catalog-open"
-          onClick={onCatalog}
-        >
-          Créer ou modifier les modèles
-          <Plus size={13} />
-        </button>
         <div className="segmented">
           <button
             className={kind === "hold" ? "active" : ""}

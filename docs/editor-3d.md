@@ -102,6 +102,10 @@ Une réservation doit viser une version persistée explicite. Modifier ensuite l
 
 ## État local, sauvegarde et évolution des supports
 
+Le lot complémentaire ajoute un presse-papiers local au workspace de salle. `copySelection` conserve un instantané profond de pan/objet, descendants, modèles et associations ; `createSelectionCopy` crée de nouveaux identifiants et vérifie le résultat sans modifier la source. Les poses des enfants restent locales et les copies de pans se décalent selon leur axe X orienté. Le composant d’atelier contrôle la disponibilité physique avant de commettre la copie dans l’historique. Aucune API de presse-papiers système n’est requise.
+
+Suppr/Retour arrière, Ctrl+C/V et Ctrl+D s’appliquent à la sélection de salle, hors saisie de texte et hors fenêtres modales ou catalogue. La suppression reste réversible et ne confirme aucun mouvement physique. Les problèmes géométriques sont conservés sous forme de liste ; leur présentation remplace les identifiants techniques par les noms du projet. L’assistant garde sa fenêtre et son brouillon lorsqu’un ajout est refusé.
+
 L’état local sépare le document métier de l’état éphémère : sélection, caméra, outil, survol, aperçu et caches ne doivent pas provoquer de versions métier. Les préférences de vue peuvent être sauvegardées à part.
 
 Les modifications passent par des commandes cohérentes : poser, déplacer, supprimer, modifier un pan ou attacher un élément. Une manipulation continue produit une seule entrée d’annulation à sa fin. Annuler/rétablir concerne le brouillon local ; cela n’annule pas une réservation, une installation ou une opération historique sur le serveur.

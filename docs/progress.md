@@ -134,3 +134,28 @@ Points de retour : `f545ab7` pour le cadrage/architecture, `c5bbaad` pour le pre
 - Bundle de l’atelier toujours supérieur au seuil d’avertissement Vite : environ 1,066 Mo brut et 283 ko gzip. Windows, Firefox, Safari et fluidité sur un vrai laptop restent à vérifier. L’image Docker n’a pas été reconstruite pour ce lot ; sa précédente validation ne remplace pas ce contrôle ultérieur.
 
 Ce lot est livré sur la branche du POC. Le point de retour avant ces changements reste `b14b33b`. La suite de la V1 demeure soumise à la recette et à la validation du porteur du projet.
+
+## Complément de recette — catalogue, clavier et fixations
+
+**État : points 1, 2, 4 et 5 implémentés et vérifiés ; point 3 documenté provisoirement, sources professionnelles encore inaccessibles et décision de placement attendue.**
+
+- Deux onglets du catalogue de projet, prises et volumes, avec recherche commune extensible par nom, forme, code couleur enregistré et dimensions. Les futurs filtres détaillés restent à définir. L’éditeur de modèles n’est accessible que par l’icône du menu latéral principal ; les raccourcis d’accès de palette et de propriétés ont été retirés.
+- Suppr et Retour arrière suppriment la sélection de salle avec ses descendants et associations ; le dernier pan reste protégé. Ctrl+C/V copie et colle, Ctrl+D duplique, Ctrl+Z annule. Les copies possèdent de nouveaux identifiants, conservent les coordonnées des enfants et les associations aux voies existantes. Le stock et la géométrie sont contrôlés avant ajout atomique. Presse-papiers local à la salle, sans permission de presse-papiers système ; champs de saisie, catalogue et fenêtres modales préservent leurs interactions.
+- L’assistant de murs multi-inclinaisons affiche toute la liste des contraintes refusées avec des noms lisibles, conserve le formulaire et n’ajoute aucun segment partiel. La limite de 100 pans explique le nombre existant, le nombre ajouté et le total obtenu.
+- Une étude détaillée dans [fixations.md](fixations.md) distingue boulonnage sur insert existant, vissage dans une zone autorisée, anti-rotation, modification de produit et interfaces de réception des volumes. Elle explique le cas d’une pyramide creuse à arrière ouvert avec appuis plans et fixation périphérique possible. Ces principes généraux ne sont attribués à aucun produit sans notice consultée.
+
+### Résultats réels
+
+- `npm test` : **77/77 réussis**, aucun skip ni échec : 25 géométrie, 19 historique/copie locale, 6 planification pure et 27 intégrations PostgreSQL.
+- `npm run build` final : tous les typechecks et la compilation web réussis. Avertissement Vite conservé : atelier d’environ 1,076 Mo brut et 287 ko gzip ; aucune nouvelle dépendance.
+- Playwright final : **28/28 réussis en 2,0 min**, dont 11 HTTP et 17 parcours Chromium avec WebGL, sur la base séparée `climbed_e2e_test` et le serveur compilé 3002. Les 21 scénarios précédents sont conservés. Une première campagne avait obtenu 27/28 : elle a révélé une classification approximative de couleur, retirée au profit du code couleur enregistré ; les assertions de recherche sont conservées.
+- Les nouveaux scénarios prouvent filtres combinés, navigation unique, suppression et annulation, conservation de hiérarchie et associations, refus de copie sans stock, raccourcis natifs et deux causes de collision distinctes dans l’assistant.
+- Les trois salles de développement conservent leurs révisions et placements : 51/38, 20/38 et 3/10. Le moteur de réservation et les règles physiques de montage n’ont pas été modifiés.
+
+### Recherche et décision restante
+
+Nouvelle tentative réelle vers neuf destinations fabricant/PDF/forum le 19 octobre 2026 à 20:28:58 UTC : refus `Tunnel connection failed: 403 Forbidden` avant lecture ; témoin npm HTTP 200, TLS vérifié. Aucun extrait professionnel n’a été reçu et aucune dimension ou trame universelle n’est inventée. Les domaines supplémentaires ont été enregistrés dans un brouillon réseau ; son activation nécessite Enregistrer puis Publier dans les paramètres de l’environnement et un nouvel essai effectif. L’enregistrement seul ne débloque pas la session.
+
+La proposition à décider est de séparer les fixations de l’objet et les points/surfaces récepteurs du support : placement boulonné sur insert avec rotation, placement vissé sur zone autorisée et information inconnue explicitement signalée. Aucun nouveau moteur de montage ni profil fabricant n’est activé avant cette décision et la lecture de documents exploitables. Les pyramides génériques du POC ne reproduisent pas encore des coques constructeur creuses.
+
+Le point de retour avant ce complément est `221ee89`. La mise à jour reste sur `poc/climbed-3d`, sans déploiement public.

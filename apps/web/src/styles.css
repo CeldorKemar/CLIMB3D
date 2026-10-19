@@ -2853,3 +2853,64 @@ button svg {
     font-size: 20px;
   }
 }
+.catalog-category-tabs {
+  margin-bottom: 13px;
+}
+.catalog-category-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 10px;
+}
+.catalog-category-tabs button > span {
+  font-size: 8px;
+  font-weight: 400;
+  opacity: 0.65;
+}
+.catalog-search {
+  margin-bottom: 6px;
+}
+.catalog-search input {
+  font-size: 9px;
+}
+.catalog-search-help {
+  color: #a2af94;
+  font-size: 8px;
+  line-height: 1.6;
+  margin: 0 2px 16px;
+}
+.catalog-empty-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+.catalog-empty-stage .empty-copy {
+  max-width: 330px;
+  font-size: 12px;
+  color: #899b76;
+  line-height: 1.9;
+}
+.chain-modal > .chain-validation-errors {
+  display: block;
+  justify-content: initial;
+  font-size: 10px;
+}
+.chain-validation-errors > p {
+  font-weight: 600;
+}
+.chain-validation-errors > ul {
+  padding-left: 17px;
+  margin: 8px 0 0;
+}
+.chain-validation-errors li {
+  margin: 6px 0;
+  line-height: 1.7;
+}
+.chain-validation-errors:focus {
+  outline: 2px solid #d5b59c;
+  outline-offset: 3px;
+}

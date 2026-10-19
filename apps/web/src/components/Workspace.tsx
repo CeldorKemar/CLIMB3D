@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Check,
@@ -31,6 +31,14 @@ import {
 import { api } from "../api/client";
 import { useEditor } from "../hooks/useEditor";
 import { remainingStock } from "../domain/stock";
+import { describeSceneProblems } from "../domain/diagnostics";
+import {
+  applyCommand,
+  copySelection,
+  createSelectionCopy,
+  InvalidSceneError,
+  type SceneClipboard,
+} from "@climbed/editor-core";
 import {
   SceneCanvas,
   type SurfacePoint,
@@ -85,6 +93,10 @@ export function Workspace({
   const [pendingRoom, setPendingRoom] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
   const [chainOpen, setChainOpen] = useState(false);
+  const clipboard = useRef<{
+    content: SceneClipboard;
+    nextPasteIndex: number;
+  } | null>(null);
   const dirty = JSON.stringify(scene) !== JSON.stringify(base.scene);
   const activeModel = scene.models.find((m) => m.id === activeModelId);
   const currentRoom = session.rooms.find((r) => r.id === roomId);
@@ -110,26 +122,85 @@ export function Workspace({
     setRightTab(tab);
   }
   useEffect(() => {
+    if (
+      selected &&
+      !scene.walls.some((w) => w.id === selected) &&
+      !scene.placements.some((p) => p.id === selected)
+    )
+      setSelected(null);
+  }, [scene, selected]);
+  useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
-      if (busy) return;
+      if (busy || e.defaultPrevented || e.isComposing) return;
       const target = e.target as HTMLElement;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (
+        target.isContentEditable ||
+        target.closest(
+          'input, textarea, select, [contenteditable="true"], [role="textbox"]',
+        )
+      )
+        return;
       if (e.key === "Escape") {
         setActiveModelId(null);
         setHelp(false);
+        return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      if (help || pendingRoom || chainOpen || target.closest('[role="dialog"]'))
+        return;
+      const modifier = (e.ctrlKey || e.metaKey) && !e.altKey;
+      if (modifier && e.key.toLowerCase() === "z") {
         e.preventDefault();
         e.shiftKey ? editor.redo() : editor.undo();
+        return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+      if (modifier && e.key.toLowerCase() === "y") {
         e.preventDefault();
         editor.redo();
+        return;
+      }
+      if (editorView !== "room") return;
+      if (modifier && !e.shiftKey && e.key.toLowerCase() === "c" && selected) {
+        e.preventDefault();
+        copySelected();
+      } else if (
+        modifier &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "v" &&
+        clipboard.current
+      ) {
+        e.preventDefault();
+        pasteCopied();
+      } else if (
+        modifier &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "d" &&
+        selected
+      ) {
+        e.preventDefault();
+        if (copySelected(false)) pasteCopied();
+      } else if (
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        (e.key === "Delete" || e.key === "Backspace") &&
+        selected
+      ) {
+        e.preventDefault();
+        deleteSelected();
       }
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [editor.undo, editor.redo, busy]);
+  }, [
+    scene,
+    selected,
+    remaining,
+    editorView,
+    help,
+    pendingRoom,
+    chainOpen,
+    busy,
+  ]);
   useEffect(() => {
     if (!dirty) return;
     const unload = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -205,6 +276,75 @@ export function Workspace({
       setNotice("Inventaire mis à jour.");
     } finally {
       setBusy(false);
+    }
+  }
+  function copySelected(showNotice = true): boolean {
+    if (!selected) return false;
+    try {
+      clipboard.current = {
+        content: copySelection(scene, selected),
+        nextPasteIndex: 1,
+      };
+      setError("");
+      editor.clearIssue();
+      if (showNotice)
+        setNotice("Sélection copiée. Ctrl+V pour la coller dans cette salle.");
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      return false;
+    }
+  }
+  function pasteCopied() {
+    const copied = clipboard.current;
+    if (!copied) return;
+    const demand = new Map<string, number>();
+    for (const placement of copied.content.placements)
+      demand.set(placement.modelId, (demand.get(placement.modelId) ?? 0) + 1);
+    const shortages = [...demand].flatMap(([id, count]) => {
+      const available = Math.max(0, remaining.get(id) ?? 0);
+      const model = copied.content.models.find((item) => item.id === id);
+      return available < count
+        ? [
+            `${model?.name ?? id} : ${count} pièce(s) à copier, ${available} disponible(s).`,
+          ]
+        : [];
+    });
+    if (shortages.length) {
+      setError(
+        `Stock insuffisant. ${shortages.join(" · ")} Aucune copie ajoutée.`,
+      );
+      return;
+    }
+    try {
+      const result = createSelectionCopy(
+        scene,
+        copied.content,
+        () => crypto.randomUUID(),
+        copied.nextPasteIndex,
+      );
+      if (edit((d) => Object.assign(d, result.scene))) {
+        copied.nextPasteIndex++;
+        select(result.selectedId);
+        setRightTab("design");
+        setError("");
+        setNotice("Sélection collée. Aucun matériel réservé.");
+        changeView("perspective");
+      }
+    } catch (e) {
+      const problems =
+        e instanceof InvalidSceneError ? e.problems : [(e as Error).message];
+      setError(describeSceneProblems(scene, problems).join(" · "));
+    }
+  }
+  function deleteSelected() {
+    if (!selected) return;
+    const command = scene.walls.some((w) => w.id === selected)
+      ? { type: "remove-wall" as const, id: selected }
+      : { type: "remove-placement" as const, id: selected };
+    if (edit((d) => Object.assign(d, applyCommand(d, command)))) {
+      select(null);
+      setError("");
     }
   }
   function place(point: SurfacePoint) {
@@ -289,14 +429,25 @@ export function Workspace({
       changeView("perspective");
     }
   }
-  function addChain(walls: WallDefinition[]): boolean {
-    const ok = edit((d) => d.walls.push(...walls));
-    if (ok) {
+  function addChain(walls: WallDefinition[]): {
+    ok: boolean;
+    problems: string[];
+  } {
+    if (scene.walls.length + walls.length > 100) {
+      return {
+        ok: false,
+        problems: [
+          `Le projet contient ${scene.walls.length} pans. Ajouter ${walls.length} segments donnerait ${scene.walls.length + walls.length} pans, au-delà de la limite de 100.`,
+        ],
+      };
+    }
+    const result = editor.editDetailed((d) => d.walls.push(...walls));
+    if (result.ok) {
       select(walls[0]!.id);
       setRightTab("design");
       changeView("perspective");
     }
-    return ok;
+    return result;
   }
   function requestRoom(id: string) {
     if (id === roomId) return;
@@ -473,11 +624,15 @@ export function Workspace({
               }}
               onAddWall={addWall}
               onAddChain={() => setChainOpen(true)}
-              onCatalog={openCatalog}
               remaining={remaining}
               totals={totals}
             />
-            <section className="viewport-area">
+            <section
+              className="viewport-area"
+              data-testid="keyboard-workspace"
+              tabIndex={0}
+              aria-label="Éditeur de salle : Suppr, Ctrl+C, Ctrl+V et Ctrl+D sur la sélection"
+            >
               <div className="viewport-heading">
                 <div>
                   <div className="breadcrumb">
@@ -637,7 +792,6 @@ export function Workspace({
                   hiddenRouteIds={hiddenRouteIds}
                   setHiddenRouteIds={setHiddenRouteIds}
                   onDuplicate={duplicatePlacement}
-                  onCatalog={openCatalog}
                 />
               ) : rightTab === "stock" ? (
                 <StockPanel
@@ -778,6 +932,12 @@ export function Workspace({
               Glisser : orbiter · Clic droit : déplacer · Molette : zoomer
               <br />
               Échap : sélectionner · Ctrl Z : annuler · Ctrl Maj Z : rétablir
+              <br />
+              Sélection : Suppr ou Retour arrière · Ctrl C / Ctrl V : copier /
+              coller · Ctrl D : dupliquer
+              <br />
+              Le presse-papiers de conception reste dans cette salle. Les copies
+              incluent les éléments du pan et respectent le stock disponible.
             </p>
             <p className="small-muted">
               Les modèles génériques ne constituent pas une validation

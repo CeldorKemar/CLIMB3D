@@ -1,4 +1,4 @@
-import { sceneSchema, type SceneDocument, type WallDefinition, type Placement, type BoulderDefinition, type ModelDefinition } from '@climbed/contracts';
+import { modelSchema, sceneSchema, type SceneDocument, type WallDefinition, type Placement, type BoulderDefinition, type ModelDefinition, type Vec3, type Quat } from '@climbed/contracts';
 import { validateScene, validateSceneChange } from '@climbed/geometry';
 
 export interface EditorHistory {
@@ -113,4 +113,138 @@ export function applyCommand(source: SceneDocument, command: EditorCommand): Sce
   }
   assertValidSceneChange(source, scene);
   return scene;
+}
+
+interface ClipboardAssociation {
+  boulderId: string;
+  placementIds: string[];
+  startIds: string[];
+  finishIds: string[];
+}
+interface ClipboardContent {
+  version: 1;
+  rootId: string;
+  /** Includes the selected placement itself when kind is 'placement'. */
+  placements: Placement[];
+  models: ModelDefinition[];
+  associations: ClipboardAssociation[];
+}
+export type SceneClipboard = ClipboardContent & (
+  | { kind: 'wall'; wall: WallDefinition }
+  | { kind: 'placement' }
+);
+export interface SelectionCopyResult {
+  scene: SceneDocument;
+  selectedId: string;
+  addedPlacementIds: string[];
+}
+
+/** A deep snapshot: later edits or deletion of the source do not alter clipboard contents. */
+export function copySelection(scene: SceneDocument, id: string): SceneClipboard {
+  assertValidScene(scene, { collisions: false });
+  const wall = scene.walls.find(item => item.id === id);
+  const root = scene.placements.find(item => item.id === id);
+  if (!wall && !root) throw new InvalidSceneError([`Objet à copier introuvable : ${id}`]);
+  const ids = new Set(wall
+    ? scene.placements.filter(item => item.parentType === 'wall' && item.parentId === wall.id).map(item => item.id)
+    : [id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const item of scene.placements) {
+      if (item.parentType === 'volume' && ids.has(item.parentId) && !ids.has(item.id)) {
+        ids.add(item.id); changed = true;
+      }
+    }
+  }
+  const placements = scene.placements.filter(item => ids.has(item.id));
+  const modelIds = new Set(placements.map(item => item.modelId));
+  const associations = scene.boulders.flatMap(boulder => {
+    const placementIds = boulder.placementIds.filter(item => ids.has(item));
+    return placementIds.length ? [{
+      boulderId: boulder.id, placementIds,
+      startIds: boulder.startIds.filter(item => ids.has(item)),
+      finishIds: boulder.finishIds.filter(item => ids.has(item)),
+    }] : [];
+  });
+  const content: ClipboardContent = {
+    version: 1, rootId: id, placements,
+    models: scene.models.filter(item => modelIds.has(item.id)), associations,
+  };
+  return structuredClone(wall ? { ...content, kind: 'wall', wall } : { ...content, kind: 'placement' });
+}
+
+function rotatedVector(vector: Vec3, rotation: Quat): Vec3 {
+  // Quaternion rotation without introducing a rendering dependency in editor-core.
+  const [x, y, z] = vector, [qx, qy, qz, qw] = rotation;
+  const tx = 2 * (qy * z - qz * y), ty = 2 * (qz * x - qx * z), tz = 2 * (qx * y - qy * x);
+  return [x + qw * tx + qy * tz - qz * ty, y + qw * ty + qz * tx - qx * tz, z + qw * tz + qx * ty - qy * tx];
+}
+const addVector = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+
+/**
+ * Creates an atomic, validated local copy. The caller commits the returned scene through
+ * its history and checks physical stock separately. pasteIndex is relative to the snapshot.
+ */
+export function createSelectionCopy(
+  source: SceneDocument, clipboard: SceneClipboard, createId: () => string, pasteIndex = 1,
+): SelectionCopyResult {
+  if (clipboard.version !== 1 || !Number.isInteger(pasteIndex) || pasteIndex < 1) {
+    throw new InvalidSceneError(['Presse-papiers ou numéro de copie invalide.']);
+  }
+  const scene = structuredClone(source);
+  for (const model of clipboard.models) {
+    const existing = scene.models.find(item => item.id === model.id);
+    // Zod rebuilds keys in schema order so equivalent serialized definitions compare equally.
+    if (!existing || JSON.stringify(modelSchema.parse(existing)) !== JSON.stringify(modelSchema.parse(model))) {
+      throw new InvalidSceneError([`Le modèle copié n’existe plus avec la même définition : ${model.id}`]);
+    }
+  }
+  const occupiedIds = new Set([
+    ...scene.walls.flatMap(wall => [wall.id, ...wall.openings.map(opening => opening.id)]),
+    ...scene.models.map(model => model.id), ...scene.placements.map(item => item.id), ...scene.boulders.map(item => item.id),
+  ]);
+  const freshId = (): string => {
+    const id = createId();
+    if (!id || occupiedIds.has(id)) throw new InvalidSceneError(['Le générateur doit fournir un identifiant nouveau pour chaque objet.']);
+    occupiedIds.add(id); return id;
+  };
+  const remapped = new Map<string, string>();
+  let selectedId: string;
+  if (clipboard.kind === 'wall') {
+    const wall = structuredClone(clipboard.wall);
+    selectedId = freshId(); remapped.set(clipboard.rootId, selectedId);
+    wall.id = selectedId;
+    wall.name = `${wall.name.slice(0, 91)} (copie)`;
+    wall.openings = wall.openings.map(opening => ({ ...opening, id: freshId() }));
+    wall.position = addVector(wall.position, rotatedVector([(wall.width + .3) * pasteIndex, 0, 0], wall.rotation));
+    scene.walls.push(wall);
+  } else {
+    const root = clipboard.placements.find(item => item.id === clipboard.rootId);
+    if (!root) throw new InvalidSceneError(['La sélection copiée ne contient plus son élément principal.']);
+    selectedId = freshId(); remapped.set(root.id, selectedId);
+  }
+  for (const item of clipboard.placements) if (!remapped.has(item.id)) remapped.set(item.id, freshId());
+  const copied = clipboard.placements.map(original => {
+    const item = structuredClone(original);
+    item.id = remapped.get(original.id)!;
+    item.parentId = remapped.get(original.parentId) ?? original.parentId;
+    if (clipboard.kind === 'placement' && original.id === clipboard.rootId) {
+      const model = clipboard.models.find(model => model.id === original.modelId);
+      if (!model) throw new InvalidSceneError([`Modèle absent du presse-papiers : ${original.modelId}`]);
+      item.position = addVector(item.position, [(model.dimensions[0] + .08) * pasteIndex, 0, 0]);
+    }
+    return item;
+  });
+  scene.placements.push(...copied);
+  const append = (existing: string[], originals: string[]) => [...new Set([...existing, ...originals.map(id => remapped.get(id)!).filter(Boolean)])];
+  for (const association of clipboard.associations) {
+    const boulder = scene.boulders.find(item => item.id === association.boulderId);
+    if (!boulder) continue;
+    boulder.placementIds = append(boulder.placementIds, association.placementIds);
+    boulder.startIds = append(boulder.startIds, association.startIds);
+    boulder.finishIds = append(boulder.finishIds, association.finishIds);
+  }
+  assertValidSceneChange(source, scene);
+  return { scene, selectedId, addedPlacementIds: copied.map(item => item.id) };
 }

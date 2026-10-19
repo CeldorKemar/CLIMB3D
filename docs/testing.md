@@ -139,7 +139,7 @@ Chromium système est utilisé s'il existe à `/usr/bin/chromium`. Sinon, instal
 
 ## Recette des corrections
 
-La suite Vitest comprend 25 cas de géométrie, 5 d’historique local, 6 de planification pure et 27 d’intégration PostgreSQL. Les ajouts couvrent contacts et contenance, cavités réellement vides, collisions entre pans, empreintes d’appui, scènes anciennes, assemblage 0°/30°/0°, intégrité des sauvegardes et restaurations atomiques.
+La suite Vitest comprend 25 cas de géométrie, 19 d’historique local et de copie de sélection, 6 de planification pure et 27 d’intégration PostgreSQL. Les ajouts couvrent contacts et contenance, cavités réellement vides, collisions entre pans, empreintes d’appui, scènes anciennes, assemblage 0°/30°/0°, intégrité des sauvegardes, restaurations atomiques et copie profonde de hiérarchies.
 
 Les nouveaux parcours Playwright vérifient le catalogue séparé sans perte du brouillon, les quantités et leur déclaration explicite, l’absence de personnalisation d’un placement, le vrai masquage WebGL de volumes partagés, les champs de toit, le refus de collision et l’historique depuis l’interface. Un contrôle conserve des coordonnées non arrondies après simple focus puis sortie d’un champ, sans édition.
 
@@ -149,4 +149,12 @@ Pour cette campagne, le serveur web/API a été démarré sans watch sur le port
 WEB_BASE_URL=http://127.0.0.1:3002 API_BASE_URL=http://127.0.0.1:3002/api/v1 npm run test:e2e
 ```
 
-Ces deux variables choisissent les endpoints des tests ; elles ne changent pas la base utilisée par un serveur déjà démarré. Ne pas exécuter deux campagnes simultanées contre les mêmes salles. Les contextes HTTP de test réutilisent des sessions réelles conservées uniquement en mémoire du worker afin de respecter la limite de connexion ; les parcours navigateur passent toujours par le formulaire réel.
+Ces deux variables choisissent les endpoints des tests ; elles ne changent pas la base utilisée par un serveur déjà démarré. Ne pas exécuter deux campagnes simultanées contre les mêmes salles. Les contextes HTTP de test réutilisent des sessions réelles conservées uniquement en mémoire du worker afin de respecter la limite de connexion ; les modes de connexion des parcours navigateur sont précisés ci-dessous.
+
+## Catalogue, raccourcis et diagnostics
+
+Quatorze cas supplémentaires du noyau testent la copie des pans et objets, les identifiants et ouvertures distincts, les coordonnées locales des descendants, les décalages orientés, les associations de voies et l’absence de mutation de la source. Les refus couvrent collision, empreinte invalide, modèle ou support supprimé et limite des départs/arrivées.
+
+Sept nouveaux scénarios navigateur vérifient les onglets et la recherche combinée du catalogue, l’entrée unique par le menu latéral, Suppr et Retour arrière, les copies au clavier avec descendants et contrôle du stock, les raccourcis natifs des champs, la limite de pans et l’affichage de plusieurs collisions dans l’assistant. La recherche de couleur porte sur le code hexadécimal réellement stocké ; les filtres détaillés et noms de couleurs restent à spécifier.
+
+Les dix parcours navigateur antérieurs conservent leur connexion par formulaire. Les sept nouveaux utilisent l’option explicite `reuseSession` du helper : ils reprennent dans le navigateur une session obtenue par une vraie connexion HTTP, en mémoire seulement, pour respecter la limite des tentatives de connexion sans dérogation serveur. Les assertions de géométrie, de stock et de persistance ne sont pas simulées.

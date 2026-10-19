@@ -4,11 +4,19 @@ import type { BootstrapResponse, RoomState, SceneDocument } from '../../packages
 export const apiBase = process.env.API_BASE_URL ?? 'http://localhost:3001/api/v1';
 export const password = 'climbed-local-demo';
 
-export async function enterWorkshop(page: Page) {
+export async function enterWorkshop(page: Page, options: { reuseSession?: boolean } = {}) {
+  if (options.reuseSession) {
+    const actor = await login('alice@climbed.local');
+    try {
+      await page.context().addCookies((await actor.api.storageState()).cookies);
+    } finally { await actor.api.dispose(); }
+  }
   await page.goto('/');
-  await page.getByLabel('Adresse e-mail').fill('alice@climbed.local');
-  await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Entrer dans l’atelier' }).click();
+  if (!options.reuseSession) {
+    await page.getByLabel('Adresse e-mail').fill('alice@climbed.local');
+    await page.getByLabel('Mot de passe', { exact: true }).fill(password);
+    await page.getByRole('button', { name: 'Entrer dans l’atelier' }).click();
+  }
   await expect(page.getByTestId('editor-canvas').locator('canvas')).toBeVisible();
   await page.getByTestId('view-front').click();
   await expect(page.getByTestId('view-front')).toHaveClass(/active/);
