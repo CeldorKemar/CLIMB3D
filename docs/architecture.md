@@ -175,3 +175,10 @@ Les processus ne sont pas supposés survivre à un redémarrage ou à une restau
 5. Démontrer les blocs, l’historique, les conflits concurrents et la scène de performance sur laptop.
 
 Les étapes sont intégrées en petits lots démontrables. Cet ordre proposé adapte le plan initial pour éviter de développer une grande quantité d’objets sans isolation, tout en donnant une preuve 3D très tôt. Chaque phase importante garde sa validation utilisateur.
+
+
+## Plan de salle et contraintes de montage du dernier lot
+
+Les contrats facultatifs de niveau, sol, escalier, trou propre et insert récepteur sont indépendants de React et de Three.js. `geometry` produit les projections XZ, transformations de niveaux, marches, perçages et règles de fixation. Le rendu consomme ces résultats ; l’API revalide les modifications avant écriture. `editor-core` conserve les commandes de suppression multiple, suppression de voie et copie sans dépendance d’interface.
+
+La sélection multiple, le survol et l’agrandissement du plan restent éphémères. Les niveaux et interfaces de montage sont persistés avec le document JSONB versionné. Les champs facultatifs permettent d’ouvrir les scènes anciennes sans migration destructive. Les profils de démonstration sont inférés sans modifier l’identité des modèles inventoriés. Les nouveaux placements respectent les fixations ; les ancres héritées inchangées sont préservées.

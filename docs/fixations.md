@@ -2,7 +2,7 @@
 
 ## Statut de cette étude
 
-Ce document répond à la demande d'explication sur les pratiques de fixation et propose un modèle fonctionnel **à valider**. Il ne change ni les placements ni les règles de montage du logiciel.
+Ce document conserve l’étude provisoire des pratiques de fixation. La demande suivante du porteur du projet autorise désormais des trous visibles et un placement contraint dans le POC. Les exemples implémentés sont synthétiques ; aucune notice fabricant n’a été rendue accessible depuis cette étude.
 
 Le 19 octobre 2026 à **18:32 UTC**, douze requêtes HTTPS vers des fabricants, un guide PDF candidat et des forums ont échoué au proxy avec `Tunnel connection failed: 403 Forbidden`. Aucun contenu technique de ces sites n'a été reçu. La requête témoin vers le registre npm a reçu HTTP 200. La vérification TLS est restée active ; aucun contournement du proxy n'a été utilisé.
 
@@ -128,7 +128,7 @@ La présence de ces champs ne prouve pas leur affichage complet dans l'interface
 4. **Ajouter ensuite une aide au placement par mode** : choix d'un insert pour une pièce boulonnée ; surface et points de vis pour une pièce prévue pour vissage ; combinaison explicite si plusieurs interfaces sont requises. L'information inconnue reste signalée au lieu d'être inventée.
 5. **Présenter une liste de points à contrôler par l'ouvreur**, avec les sources disponibles, sans transformer une vérification géométrique en approbation mécanique.
 
-Les placements contraints, le perçage de nouvelles pièces et une bibliothèque de profils fabricant ne sont pas implémentés par cette étude. La décision à obtenir porte sur ce fonctionnement et son niveau de détail avant d'en changer le comportement.
+Le POC implémente désormais le placement contraint décrit ci-dessous. Une bibliothèque de profils fabricant vérifiés et un outil de perçage libre restent à réaliser.
 
 ## Recherche effectuée et poursuite documentaire
 
@@ -150,3 +150,16 @@ Les placements contraints, le perçage de nouvelles pièces et une bibliothèque
 Preuves locales horodatées : `.data/research/fixations-20261019T183240Z/requests.json`, ignoré par Git. Les refus ne sont pas des citations de notices. Il n'existe actuellement aucun extrait de fabricant vérifié à reproduire dans ce document.
 
 Après ouverture effective des domaines dans l'instance : retrouver les documents depuis les sites officiels, vérifier leur version, choisir au moins une référence de prise boulonnée, une prise vissée, un volume fixé en périphérie et un volume proposant des inserts. Pour chaque référence, relever l'extrait exact et sa page, la construction arrière, les points de fixation, les points d'appui, les possibilités d'ajout de prises et les interdictions de modification. Un forum peut éclairer les usages et les difficultés ; il ne remplace pas les instructions de la référence et du système de mur.
+
+
+## Mise en œuvre du POC après les derniers retours
+
+Les champs facultatifs `mounting` décrivent la méthode et les trous propres de l’objet ; `supportFixings` décrit les inserts récepteurs et l’autorisation de vissage du support. Le générateur enlève réellement la matière des perçages, avec des parois intérieures ; les marqueurs d’inserts sur les pans restent distincts des grandes ouvertures traversantes.
+
+Sans profil explicite, les prises de démonstration reçoivent un trou central de boulonnage ; les volumes reçoivent quatre trous de vissage. La boîte de démonstration fournit un insert récepteur central sur sa face avant. Les autres volumes ne reçoivent pas automatiquement un réseau d’inserts. Ces valeurs et emplacements sont des exemples visuels, jamais des cotes attribuées à un fournisseur. Ils sont calculés sans modifier les JSON de modèles ni leurs empreintes d’inventaire.
+
+Un objet boulonné doit aligner tous ses trous principaux avec des inserts distincts dont la normale et, lorsqu’il est renseigné des deux côtés, le filetage sont compatibles. L’accrochage traduit l’objet en tenant compte de la position réelle de son trou ; il ne déplace pas arbitrairement l’insert. Un objet vissé vérifie chaque point de vis sur une surface autorisée, sans exiger que les vis coïncident avec la trame d’inserts du mur. Les fixations complémentaires sont contrôlées également. La tolérance numérique d’alignement de 0,5 mm n’est pas une tolérance fabricant.
+
+Le survol présente le même candidat que le clic et la validation serveur : vert si accepté, rouge avec les motifs en cas de défaut de fixation, collision ou manque de stock dans l’éditeur. Les anciennes ancres restent consultables et sauvegardables si inchangées ; une ancre nouvelle, déplacée ou réintroduite par restauration respecte ces règles. Aucun perçage nouveau n’est inventé pendant le placement.
+
+Les coques creuses constructeur, les longueurs de vis, la résistance des supports et une certification mécanique ne sont pas modélisées. Le profil synthétique de pyramide conserve la forme paramétrique du POC ; il ne reproduit pas le dos d’un produit commercial.

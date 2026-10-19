@@ -227,7 +227,10 @@ export class PostgresRepository implements ClimbedRepository {
       const saved = found.rows[0];
       if (!saved.integrity_valid) throw conflict('Intégrité de la sauvegarde invalide.');
       const candidate = saved.kind === 'room' ? saved.scene as SceneDocument : mergeBoulderSnapshot(room.scene, saved.scene, saved.boulder_id, (a, b) => fingerprint(a) === fingerprint(b));
-      const issues = validateScene(candidate);
+      // Restoring a scene is subject to the same mounting rules as a new edit.
+      // Unchanged inherited anchors remain readable, but newly restored or
+      // changed anchors must align with the declared receiving fixings.
+      const issues = [...new Set([...validateScene(candidate), ...validateSceneChange(room.scene, candidate)])];
       if (issues.length) throw new ConflictException({ message: 'Restauration impossible : géométrie ou collisions invalides.', code: 'INVALID_RESTORE', details: issues });
       await this.assertCatalogVersions(db, org, roomId, candidate, room.scene);
       const occupied = await this.lockStock(db, org, roomId);

@@ -69,7 +69,7 @@ Les filetages, espacements, dimensions et compatibilités fabricant sont **à do
 
 Le parcours principal est : choisir un modèle → survoler une surface → voir un aperçu → cliquer pour poser → continuer à poser le même modèle. Échap quitte l’outil. La rotation est ajustable rapidement, avec saisie précise disponible. Les interactions de caméra restent distinctes des gestes de placement et de manipulation.
 
-L’aperçu indique le support visé et les raisons d’un placement invalide. Le placement prend en compte le repère de montage du modèle et la normale de la surface, puis laisse régler l’orientation. L’accrochage à une fixation existante et le placement libre sont des options explicites ; le placement libre reste disponible en conception théorique.
+L’aperçu indique le support visé et les raisons d’un placement invalide. Le placement prend en compte le repère de montage du modèle et la normale de la surface, puis laisse régler l’orientation. Le POC actuel impose l’accrochage aux inserts pour les objets boulonnés et vérifie les zones autorisées pour le vissage. Les anciens placements inchangés restent préservés.
 
 Sur les surfaces courbes autorisées, le point choisi et le repère local doivent être conservés de façon reproductible. En V1, le générateur paramétrique fournit une représentation de surface exploitable. La V2 devra définir la projection et la réévaluation des attaches pour chaque version de mesh ; un simple indice de triangle ne suffira pas.
 
@@ -166,3 +166,14 @@ Avant de développer tout l’éditeur, une tranche technique devra vérifier :
 Les risques principaux sont la robustesse des contours et ouvertures, l’identité des supports pendant les modifications, le rendu et le picking d’une scène dense, ainsi que l’écart entre la géométrie visible et les propriétés de fixation réellement documentées. Ils seront traités par des cas de validation ciblés et des mesures, plutôt que par l’ajout préalable d’un moteur de modélisation général.
 
 Cette architecture garde le même document métier pour les formes paramétriques V1 et les assets mesh V2, tout en laissant l’acquisition par scan, le traitement de fichiers et l’enrichissement mécanique dans des chantiers identifiés.
+
+
+## Plan, sols et sélection du POC actuel
+
+Le plan représente l’empreinte XZ du volume réel de chaque pan, après quaternion et translation. Un pan vertical conserve son épaisseur ; un toit conserve sa profondeur projetée. Cliquer le plan cadre le pan selon son orientation propre. Le plan offre masquage, agrandissement, navigation clavier et filtrage par niveau.
+
+Les sols sont des contours finis extrudés à leur altitude. L’interface actuelle édite des rectangles ; le contrat accepte des contours simples. Les escaliers droits dérivent leurs marches des altitudes reliées. Ce modèle de disposition ne réalise pas automatiquement de trémie dans le sol ni de raccord architectural.
+
+Ctrl + clic constitue une sélection multiple de pièces. Les commandes de transformation et de copie sont masquées ou ignorées lorsqu’elle comporte plusieurs éléments ; la suppression groupe les descendants et nettoie toutes les références de voies. La sélection et le cadrage ne créent aucune révision métier.
+
+Les modèles paramétriques sont perforés selon leurs trous propres et les inserts récepteurs déclarés. Les perçages retirent réellement de la matière, avec un cache borné de géométries. Les inserts de pans utilisent des marqueurs, pour éviter des milliers de perçages détaillés. L’aperçu fluorescent vert ou rouge et le clic partagent les mêmes règles d’alignement et de collision que l’API ; les raisons sont visibles dans la scène.

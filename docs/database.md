@@ -239,3 +239,10 @@ Ces scénarios décrivent des tests à écrire et exécuter après validation. A
 5. Proposition d'édition non collaborative en temps réel avec contrôle de révision ; variante de cotation à préciser avant le module blocs. Transferts intersalles reportés et références fabricant encore à documenter.
 
 Ces points sont des décisions ouvertes, pas des fonctionnalités implicitement autorisées. Le modèle devra être ajusté après leurs réponses avant toute migration applicative.
+
+
+## Extensions JSONB : niveaux et fixations
+
+Le document versionné accepte `levels` (identifiant, nom, altitude, contour XZ), `stairs` (niveaux reliés, extrémités XZ, largeur, marches) et `walls[].levelId`. `mounting` décrit les trous propres des modèles ; `supportFixings` décrit les inserts et l’autorisation de vissage des pans et modèles supports. Ces ajouts sont facultatifs et ne nécessitent aucune nouvelle migration SQL. Les valeurs inférées pour les anciens modèles ne sont pas réécrites dans leur JSON, afin de conserver les empreintes d’inventaire.
+
+La restauration de salle contrôle ces références et les ancres nouvellement réintroduites. Une restauration de voie importe le niveau manquant nécessaire à ses pans ; un niveau existant incompatible utilisé par un autre pan ou un escalier provoque un refus atomique. Les escaliers courants sont conservés. La suppression d’une voie et de ses pièces exclusives nettoie uniquement la conception ; les occupations de stock et interventions restent suivies séparément.

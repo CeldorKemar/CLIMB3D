@@ -1,4 +1,5 @@
 import type { SceneDocument } from '@climbed/contracts';
+import { getRoomLevels, getWallLevelId } from '@climbed/geometry';
 import { InvalidPlan, placementWall, PlanningConflict } from './planning.ts';
 
 function closure(scene: SceneDocument, ids: readonly string[]): Set<string> {
@@ -26,6 +27,32 @@ export function mergeBoulderSnapshot(current: SceneDocument, saved: SceneDocumen
   const outside = current.placements.filter(p => !oldOwn.has(p.id)).map(p => p.id);
   const protectedIds = closure(current, [...foreignRoots, ...outside]);
   const candidate = structuredClone(current);
+  const desiredWallIds = new Set([...desired].map(id => placementWall(saved, id)));
+  const restoredLevelIds = new Set<string>();
+
+  const restoreRequiredLevel = (levelId: string | undefined) => {
+    if (!levelId || restoredLevelIds.has(levelId)) return;
+    const level = saved.levels?.find(item => item.id === levelId);
+    if (!level) throw new InvalidPlan('Niveau du pan absent de la sauvegarde.');
+    const levels = getRoomLevels(candidate);
+    const existing = levels.find(item => item.id === levelId);
+    if (existing && !same(existing, level)) {
+      const usedOutside = current.walls.some(wall => !desiredWallIds.has(wall.id) && getWallLevelId(current, wall) === levelId);
+      const protectedRouteUsesLevel = current.placements.some(placement => {
+        if (!protectedIds.has(placement.id)) return false;
+        const wall = current.walls.find(item => item.id === placementWall(current, placement.id));
+        return wall && getWallLevelId(current, wall) === levelId;
+      });
+      const stairsUseLevel = current.stairs?.some(stair => stair.fromLevelId === levelId || stair.toLevelId === levelId);
+      if (usedOutside || protectedRouteUsesLevel || stairsUseLevel) throw new PlanningConflict('Un niveau utilisé par un autre pan, une autre voie ou un escalier a changé : restauration refusée.');
+      candidate.levels = levels.map(item => item.id === levelId ? structuredClone(level) : item);
+    } else if (!existing) {
+      // Keep the implicit legacy ground floor first: adding an elevated floor must
+      // never silently reassign unrelated panels without an explicit levelId.
+      candidate.levels = [...levels, structuredClone(level)];
+    }
+    restoredLevelIds.add(levelId);
+  };
 
   for (const id of desired) {
     const placement = saved.placements.find(p => p.id === id)!;
@@ -40,6 +67,7 @@ export function mergeBoulderSnapshot(current: SceneDocument, saved: SceneDocumen
     const wallId = placementWall(saved, id);
     const wall = saved.walls.find(w => w.id === wallId);
     if (!wall) throw new InvalidPlan('Pan absent de la sauvegarde.');
+    restoreRequiredLevel(wall.levelId);
     const existingWall = candidate.walls.find(w => w.id === wallId);
     if (existingWall && !same(existingWall, wall)) {
       const usedOutside = current.placements.some(p => protectedIds.has(p.id) && placementWall(current, p.id) === wallId);

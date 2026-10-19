@@ -1,5 +1,5 @@
 import { modelSchema, sceneSchema, type SceneDocument, type WallDefinition, type Placement, type BoulderDefinition, type ModelDefinition, type Vec3, type Quat } from '@climbed/contracts';
-import { validateScene, validateSceneChange } from '@climbed/geometry';
+import { validateScene, validateSceneChange, snapPlacementToFixing } from '@climbed/geometry';
 
 export interface EditorHistory {
   past: SceneDocument[];
@@ -14,10 +14,12 @@ export type EditorCommand =
   | { type: 'add-placement'; placement: Placement }
   | { type: 'patch-placement'; id: string; patch: Partial<Omit<Placement, 'id'>> }
   | { type: 'remove-placement'; id: string }
+  | { type: 'remove-selection'; ids: string[] }
   | { type: 'add-model'; model: ModelDefinition }
   | { type: 'add-boulder'; boulder: BoulderDefinition }
   | { type: 'patch-boulder'; id: string; patch: Partial<Omit<BoulderDefinition, 'id'>> }
-  | { type: 'remove-boulder'; id: string };
+  | { type: 'remove-boulder'; id: string }
+  | { type: 'remove-boulder-with-placements'; id: string };
 
 export class InvalidSceneError extends Error {
   readonly problems: string[];
@@ -66,7 +68,83 @@ export function redoHistory(history: EditorHistory): EditorHistory {
   return { past: [...history.past, history.present], present: first, future: history.future.slice(1) };
 }
 
+/** Removes a batch in one edit, including supported descendants and route markers. */
+export function removeSelection(source: SceneDocument, selectedIds: string[]): SceneDocument {
+  const selected = new Set(selectedIds);
+  const known = new Set([...source.walls, ...source.placements].map(item => item.id));
+  for (const id of selected) {
+    if (!known.has(id)) throw new InvalidSceneError([`Objet à supprimer introuvable : ${id}`]);
+  }
+  const wallIds = new Set(source.walls.filter(wall => selected.has(wall.id)).map(wall => wall.id));
+  if (source.walls.length - wallIds.size < 1) throw new InvalidSceneError(['Le projet doit conserver au moins un pan.']);
+  const removed = new Set(source.placements.filter(item => selected.has(item.id)
+    || (item.parentType === 'wall' && wallIds.has(item.parentId))).map(item => item.id));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const item of source.placements) {
+      if (item.parentType === 'volume' && removed.has(item.parentId) && !removed.has(item.id)) {
+        removed.add(item.id); changed = true;
+      }
+    }
+  }
+  const scene = structuredClone(source);
+  scene.walls = scene.walls.filter(wall => !wallIds.has(wall.id));
+  removeExactPlacements(scene, removed);
+  assertValidSceneChange(source, scene);
+  return scene;
+}
+
+function removeExactPlacements(scene: SceneDocument, removed: Set<string>): void {
+  scene.placements = scene.placements.filter(item => !removed.has(item.id));
+  for (const route of scene.boulders) {
+    route.placementIds = route.placementIds.filter(id => !removed.has(id));
+    route.startIds = route.startIds.filter(id => !removed.has(id));
+    route.finishIds = route.finishIds.filter(id => !removed.has(id));
+  }
+}
+
+export interface RouteRemovalPlan {
+  removedIds: string[];
+  /** Route elements also assigned to another route. */
+  sharedIds: string[];
+  /** Exclusive volumes retained because they support a retained element. */
+  supportIds: string[];
+}
+
+/** Never removes another route's pieces, or the support of an unassigned piece. */
+export function planRouteRemoval(scene: SceneDocument, routeId: string): RouteRemovalPlan {
+  const route = scene.boulders.find(item => item.id === routeId);
+  if (!route) throw new InvalidSceneError([`Voie introuvable : ${routeId}`]);
+  const otherRouteIds = new Set(scene.boulders.filter(item => item.id !== routeId).flatMap(item => item.placementIds));
+  const existing = new Set(scene.placements.map(item => item.id));
+  const sharedIds = route.placementIds.filter(id => existing.has(id) && otherRouteIds.has(id));
+  const removed = new Set(route.placementIds.filter(id => existing.has(id) && !otherRouteIds.has(id)));
+  const supportIds = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const item of scene.placements) {
+      if (item.parentType === 'volume' && removed.has(item.parentId) && !removed.has(item.id)) {
+        removed.delete(item.parentId); supportIds.add(item.parentId); changed = true;
+      }
+    }
+  }
+  return { removedIds: [...removed], sharedIds, supportIds: [...supportIds] };
+}
+
+export function removeRouteWithPlacements(source: SceneDocument, routeId: string): SceneDocument {
+  const plan = planRouteRemoval(source, routeId);
+  const scene = structuredClone(source);
+  scene.boulders = scene.boulders.filter(item => item.id !== routeId);
+  removeExactPlacements(scene, new Set(plan.removedIds));
+  assertValidSceneChange(source, scene);
+  return scene;
+}
+
 export function applyCommand(source: SceneDocument, command: EditorCommand): SceneDocument {
+  if (command.type === 'remove-selection') return removeSelection(source, command.ids);
+  if (command.type === 'remove-boulder-with-placements') return removeRouteWithPlacements(source, command.id);
   const scene = structuredClone(source);
   const required = <T extends { id: string }>(list: T[], id: string): T => {
     const item = list.find(entry => entry.id === id);
@@ -233,6 +311,8 @@ export function createSelectionCopy(
       const model = clipboard.models.find(model => model.id === original.modelId);
       if (!model) throw new InvalidSceneError([`Modèle absent du presse-papiers : ${original.modelId}`]);
       item.position = addVector(item.position, [(model.dimensions[0] + .08) * pasteIndex, 0, 0]);
+      const snapped = snapPlacementToFixing(scene, item);
+      if (snapped) item.position = snapped.position;
     }
     return item;
   });

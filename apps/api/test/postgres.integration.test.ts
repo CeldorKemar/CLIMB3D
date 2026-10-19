@@ -200,7 +200,7 @@ suite('PostgreSQL réel : isolation, stock atomique et états physiques', () => 
 
   it('ne compte pas deux fois une prise commune à plusieurs blocs', async () => {
     const scene = testScene();
-    scene.placements = Array.from({ length: 5 }, (_, index) => ({ ...wallPlacement(`shared-hold-${index}`, 'hold-jug'), position: [-1 + index * 0.4, 2, 0] as [number, number, number] }));
+    scene.placements = Array.from({ length: 5 }, (_, index) => ({ ...wallPlacement(`shared-hold-${index}`, 'hold-jug'), position: [-1 + index * 0.5, 2, 0] as [number, number, number] }));
     const ids = scene.placements.map(p => p.id);
     scene.boulders = [
       { id: 'shared-first', name: 'Bloc A', grade: '5c', color: '#f07c54', placementIds: ids, startIds: [ids[0]!], finishIds: [ids[4]!] },
@@ -288,6 +288,99 @@ suite('PostgreSQL réel : isolation, stock atomique et états physiques', () => 
     expect(restored.scene.placements.find(p => p.id === 'physical-target')).toEqual(source.placements[0]);
     expect(restored.scene.placements.find(p => p.id === 'child-route')!.parentId).toBe('physical-target');
     expect(restored.scene.boulders).toHaveLength(2);
+  });
+
+  it('persiste les niveaux et escaliers dans la salle autorisée sans modifier le stock', async () => {
+    const scene = routeScene();
+    scene.levels = [
+      { id: 'ground', name: 'Rez-de-chaussée', elevation: 0, outline: [[-5, -3], [6, -3], [6, 5], [-5, 5]] },
+      { id: 'mezzanine', name: 'Mezzanine', elevation: 3, outline: [[-3, -2], [3, -2], [3, 2], [-3, 2]] },
+    ];
+    scene.walls[0]!.levelId = 'mezzanine'; scene.walls[0]!.position[1] = 3;
+    scene.walls[1]!.levelId = 'ground';
+    scene.stairs = [{ id: 'stairs-main', name: 'Accès mezzanine', fromLevelId: 'ground', toLevelId: 'mezzanine', start: [0, 4], end: [0, 1], width: 1, steps: 15 }];
+    const untouched = await repository.room(alice, fixtures.roomB);
+    const before = await pool.query('SELECT id,model_fingerprint,physical_state,retired_at FROM stock_items ORDER BY id');
+    const saved = await save(scene), reloaded = await repository.room(alice, fixtures.roomA);
+    expect(reloaded.scene).toEqual(scene); expect(reloaded.revision).toBe(saved.revision);
+    expect((await repository.room(alice, fixtures.roomB)).scene).toEqual(untouched.scene);
+    expect((await pool.query('SELECT id,model_fingerprint,physical_state,retired_at FROM stock_items ORDER BY id')).rows).toEqual(before.rows);
+    expect(reloaded.occupations).toEqual([]);
+  });
+
+  it('restaure le niveau requis par une voie sans importer les escaliers ni écraser le reste de la salle', async () => {
+    const source = routeScene();
+    const ground = { id: 'ground', name: 'Sol courant', elevation: 0, outline: [[-5, -3], [6, -3], [6, 5], [-5, 5]] as [number, number][] };
+    const mezzanine = { id: 'mezzanine', name: 'Mezzanine sauvegardée', elevation: 3, outline: [[-3, -2], [3, -2], [3, 2], [-3, 2]] as [number, number][] };
+    source.levels = [ground, mezzanine];
+    source.walls[0]!.levelId = 'mezzanine'; source.walls[0]!.position[1] = 3;
+    source.walls[1]!.levelId = 'ground';
+    source.stairs = [{ id: 'old-stair', name: 'Ancien escalier', fromLevelId: 'ground', toLevelId: 'mezzanine', start: [0, 4], end: [0, 1], width: 1 }];
+    await save(source); const snapshot = await capture('boulder', 'route-to-restore');
+    const current = testScene();
+    const otherLevel = { ...ground, id: 'current-upper', name: 'Étage actuel', elevation: 5 };
+    current.levels = [ground, otherLevel];
+    current.walls.forEach(wall => { wall.levelId = 'ground'; });
+    current.stairs = [{ id: 'current-stair', name: 'Escalier actuel', fromLevelId: 'ground', toLevelId: 'current-upper', start: [4, 4], end: [4, 1], width: 1.2 }];
+    const before = await save(current);
+    const restored = await repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, before.revision, request());
+    expect(restored.scene.levels).toEqual([ground, otherLevel, mezzanine]);
+    expect(restored.scene.stairs).toEqual(current.stairs);
+    expect(restored.scene.walls[0]).toEqual(source.walls[0]);
+    expect(restored.scene.walls[1]).toEqual(current.walls[1]);
+    expect(restored.scene.placements).toEqual(source.placements);
+    expect(restored.occupations).toEqual([]);
+  });
+
+  it('refuse de restaurer un niveau modifié utilisé par une autre voie sans effets partiels', async () => {
+    const source = routeScene();
+    source.levels = [{ id: 'shared-floor', name: 'Étage partagé', elevation: 3, outline: [[-5, -3], [6, -3], [6, 5], [-5, 5]] }];
+    source.walls.forEach(wall => { wall.levelId = 'shared-floor'; wall.position[1] = 3; });
+    await save(source); const snapshot = await capture('boulder', 'route-to-restore');
+    const current = structuredClone(source);
+    current.levels![0]!.elevation = 4; current.walls.forEach(wall => { wall.position[1] = 4; });
+    current.placements.push({ ...wallPlacement('foreign-floor-hold', 'hold-jug', 'wall-side'), position: [0, 2, 0] });
+    current.boulders.push({ id: 'foreign-floor-route', name: 'Autre voie', grade: '6a', color: '#66aa88', placementIds: ['foreign-floor-hold'], startIds: ['foreign-floor-hold'], finishIds: ['foreign-floor-hold'] });
+    const before = await save(current);
+    await expect(repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, before.revision, request())).rejects.toMatchObject({ status: 409, message: expect.stringContaining('niveau') });
+    const after = await repository.room(alice, fixtures.roomA);
+    expect(after.scene).toEqual(before.scene); expect(after.revision).toBe(before.revision); expect(after.audit).toEqual(before.audit);
+    expect(after.inventory).toEqual(before.inventory);
+  });
+
+  it('préserve les réservations physiques après suppression en masse du brouillon', async () => {
+    const scene = routeScene();
+    scene.placements.push({ ...wallPlacement('second-bulk-hold', 'hold-jug'), position: [1, 2, 0] });
+    await save(scene); const reservationId = await reserve();
+    const before = await repository.room(alice, fixtures.roomA);
+    const empty = testScene(); const after = await save(empty);
+    expect(after.scene.placements).toEqual([]);
+    expect(after.inventory).toEqual(before.inventory); expect(after.occupations).toEqual(before.occupations);
+    expect(after.inventory.find(row => row.modelId === 'hold-jug')!.reserved).toBe(2);
+    const cancelled = await action(reservationId, 'cancel');
+    expect(cancelled.inventory.find(row => row.modelId === 'hold-jug')!.available).toBe(12);
+  });
+
+  it('conserve un ancrage hérité inchangé mais interdit sa restauration nouvelle hors insert', async () => {
+    const legacy = routeScene(); legacy.placements[0]!.position = [.8, 2, 0];
+    // Simulate a room produced by an older release, before alignment validation.
+    await pool.query('UPDATE rooms SET scene=$2 WHERE id=$1', [fixtures.roomA, legacy]);
+    const originalModels = structuredClone(legacy.models);
+    legacy.name = 'Ancienne salle renommée sans déplacement';
+    const unchanged = await save(legacy);
+    expect(unchanged.scene.models).toEqual(originalModels);
+    const reservationId = await reserve();
+    const reserved = await repository.room(alice, fixtures.roomA);
+    expect(reserved.inventory.find(row => row.modelId === 'hold-jug')!.reserved).toBe(1);
+    expect(reserved.scene.models).toEqual(originalModels);
+    await action(reservationId, 'cancel');
+    const snapshot = await capture();
+    const aligned = structuredClone(legacy); aligned.placements[0]!.position = [1, 2, 0];
+    const before = await save(aligned);
+    await expect(repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, before.revision, request())).rejects.toMatchObject({ status: 409 });
+    const after = await repository.room(alice, fixtures.roomA);
+    expect(after.scene).toEqual(before.scene); expect(after.revision).toBe(before.revision); expect(after.audit).toEqual(before.audit);
+    expect(after.inventory).toEqual(before.inventory);
   });
 
   it('refuse une restauration de voie en collision sans effet partiel', async () => {

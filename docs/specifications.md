@@ -85,7 +85,7 @@ La recherche de fiches fabricant et de forums a été renouvelée. Les refus ré
 - L’éditeur de modèles s’ouvre uniquement depuis son icône dans le menu latéral principal ; la palette de placement ne contient plus de bouton de création/édition.
 - Une sélection de pan ou d’élément accepte suppression, copie/collage et duplication au clavier. Le pan est copié avec ses enfants, sous de nouveaux identifiants, en préservant les associations avec les voies existantes. Le stock et les collisions sont contrôlés atomiquement avant ajout ; la suppression reste locale à la conception et réversible. Les champs de texte, le catalogue et les fenêtres modales ne doivent pas déclencher ces actions de salle.
 - L’assistant multi-inclinaisons affiche chaque cause de refus dans sa fenêtre, avec des noms lisibles ; aucun ajout partiel et aucune fermeture après refus.
-- Étudier la distinction entre fixation de l’objet sur son support et capacités du support à recevoir des objets, avant de modifier les règles de placement. La proposition boulonnage sur inserts / vissage sur zones autorisées et ses limites documentaires figurent dans [fixations.md](fixations.md). La décision fonctionnelle sur le placement contraint reste à obtenir après ce topo.
+- Étudier la distinction entre fixation de l’objet sur son support et capacités du support à recevoir des objets, avant de modifier les règles de placement. La proposition boulonnage sur inserts / vissage sur zones autorisées et ses limites documentaires figurent dans [fixations.md](fixations.md). La demande suivante autorise ce placement contraint dans le POC avec profils synthétiques explicitement distingués des références fabricant.
 
 ## V2 et exclusions
 
@@ -100,3 +100,12 @@ L’historique métier des projets, installations et stocks demeure dans le pér
 Créer une salle, assembler un mur, ajouter volumes et prises, composer un bloc, sauvegarder/recharger et effectuer une réservation. Une tentative concurrente sur la dernière pièce doit être refusée sans effet partiel. Un utilisateur d’un autre client ne doit pas accéder à la scène ou au stock.
 
 Les objectifs chiffrés de performance, détails des permissions sensibles et choix d’exploitation sont des propositions d’architecture, pas des décisions métier déjà validées.
+
+
+## Derniers retours : sélection, plan et niveaux
+
+- Ctrl + clic gauche ajoute ou retire des prises et volumes de la sélection ; seule la suppression groupée est proposée pour plusieurs pièces. L’opération est atomique, annulable et nettoie les associations de voies.
+- Supprimer une voie avec ses pièces conserve les placements partagés avec une autre voie et les supports nécessaires à des enfants conservés. Aucune réservation ni installation physique n’est annulée par cette opération de conception.
+- Une minimap projette les pans réels sur XZ, avec inclinaison, orientation et épaisseur, sans les réarranger. Elle se masque, s’agrandit, filtre les niveaux et cadre le pan cliqué dans l’éditeur.
+- La salle possède des sols finis associés à des niveaux nommés et une altitude en mètres. Changer l’altitude transporte les pans associés et leurs enfants. Des escaliers droits relient deux niveaux ; sauvegarde, rechargement et historique conservent ces données.
+- Les trous de fixation propres aux prises et volumes sont réellement traversants. Boulonnage sur inserts compatibles, vissage sur surfaces autorisées et aperçu vert/rouge sont contrôlés par des règles partagées avec l’API. Les données fabricant restent à documenter ; les exemples du POC ne les remplacent pas.

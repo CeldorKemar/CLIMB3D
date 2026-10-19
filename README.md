@@ -15,7 +15,7 @@ Le dépôt technique conserve le nom `CLIMB3D`. Le nom produit retenu dans les �
 
 [Capture réelle du POC dans Chromium](docs/assets/poc-editor.png) : trois pans, cinq volumes et trente-trois prises, dont une fixée sur un volume.
 
-[Aperçu de l’éditeur de catalogue](docs/assets/poc-catalog.png).
+[Aperçu de l’éditeur de catalogue](docs/assets/poc-catalog.png) · [Plan et panneau des niveaux](docs/assets/poc-levels.png).
 
 | Document | Objet |
 | --- | --- |
@@ -61,7 +61,11 @@ Le catalogue de ce POC reste attaché au document de salle ; la bibliothèque ce
 
 Sur une sélection de salle : **Suppr** ou **Retour arrière** supprime, **Ctrl+C / Ctrl+V** copie et colle, **Ctrl+D** duplique, **Ctrl+Z** annule. Les copies d’un pan incluent ses volumes, prises et associations de voies ; elles respectent le stock et les collisions. Le presse-papiers reste local à cette salle et les champs de saisie conservent leurs raccourcis natifs. L’assistant de murs affiche les raisons détaillées d’un refus, sans ajouter de segments partiels.
 
-L’étude [Fixations et conséquences pour Climbed](docs/fixations.md) distingue les mécanismes de montage et la proposition à valider. Elle ne constitue pas une notice fournisseur : aucun nouveau mode de fixation contraint n’est activé à ce stade.
+**Ctrl + clic gauche** sélectionne plusieurs prises ou volumes ; le panneau propose alors uniquement leur suppression groupée, annulable. La suppression d’une voie propose aussi de retirer ses pièces exclusives, en conservant les pièces partagées et les supports nécessaires.
+
+Le **plan de la salle**, en bas à droite, affiche les pans à leurs coordonnées réelles en vue du dessus. Il se masque, s’agrandit et permet de cadrer un pan en cliquant dessus. Le menu **Niveaux** permet de définir les sols, leurs altitudes, les pans associés et des escaliers droits. Les niveaux font partie de la sauvegarde de salle.
+
+Les prises et volumes de démonstration possèdent des trous traversants. L’aperçu devient vert lorsque le placement est accepté, rouge avec les raisons du refus. Les objets boulonnés s’accrochent aux inserts compatibles ; les objets vissés utilisent leurs propres trous dans une surface autorisée. La même validation s’applique côté serveur. Voir [les fixations](docs/fixations.md) pour les données et limites des exemples.
 
 Les profils de fixation sont génériques et non certifiés ; aucun résultat du logiciel ne valide mécaniquement une installation réelle.
 
@@ -71,10 +75,10 @@ Les profils de fixation sont génériques et non certifiés ; aucun résultat du
 npm run typecheck
 npm test
 npm run build
-# Avec les processus de développement déjà démarrés :
+# Avec un serveur et une base de fixtures dédiés (voir docs/testing.md) :
 npm run test:e2e
 ```
 
-Les tests géométriques et métier utilisent Vitest ; les intégrations PostgreSQL utilisent exclusivement `climbed_test` via `TEST_DATABASE_URL`. Les tests Playwright utilisent Chromium : sous Linux préparé ici, `/usr/bin/chromium` ; ailleurs, définir `CHROMIUM_PATH` ou installer le navigateur Playwright selon [les instructions de test](docs/testing.md). Ils utilisent les fixtures de démo, compensent leurs opérations et restaurent les scènes sans réinitialisation globale.
+Les tests géométriques et métier utilisent Vitest ; les intégrations PostgreSQL utilisent exclusivement `climbed_test` via `TEST_DATABASE_URL`. Les tests Playwright utilisent Chromium : sous Linux préparé ici, `/usr/bin/chromium` ; ailleurs, définir `CHROMIUM_PATH` ou installer le navigateur Playwright selon [les instructions de test](docs/testing.md). Les tests de cette révision utilisent une base de fixtures dédiée sans placements hérités, compensent leurs opérations et restaurent leurs scènes. Ne pas les diriger vers une salle de travail.
 
 Le Dockerfile construit une seule application web/API. Le fonctionnement de l’image et les prérequis restants sont consignés dans l’avancement ; aucun déploiement chez un fournisseur n’est effectué automatiquement. Voir [l’hébergement](docs/hosting.md) pour la cible SaaS et le paiement futur.

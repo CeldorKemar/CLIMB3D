@@ -7,6 +7,11 @@ import {
   Matrix4, Path, Quaternion, Shape, Triangle, Vector3,
 } from 'three';
 import { detectSolidContacts, type CollisionPair, type CollisionSolid } from './collisions';
+import { getMountingHoles, getSupportFixings, mountingFingerprint, validatePlacementMounting } from './mounting';
+import { perforateGeometry } from './perforation';
+import { validateRoomLayout } from './layout';
+export * from './mounting';
+export * from './layout';
 export { COLLISION_EPSILON, type CollisionPair } from './collisions';
 
 /** Numerical tolerance in metres; this is not a mechanical clearance. */
@@ -221,8 +226,8 @@ function roundSolid(width: number, height: number, depth: number, concave: boole
   return builder.finish();
 }
 
-/** All model meshes have exact bounding dimensions, centered in XY, base at z=0. */
-export function createModelGeometry(model: ModelDefinition): BufferGeometry {
+/** Base solids have exact bounding dimensions, centered in XY, mounting face at z=0. */
+function createUnperforatedModelGeometry(model: ModelDefinition): BufferGeometry {
   const [width, height, depth] = model.dimensions;
   if (!model.dimensions.every(n => Number.isFinite(n) && n > 0)) throw new Error('Dimensions de modèle invalides');
   const x = width / 2, y = height / 2;
@@ -250,6 +255,85 @@ export function createModelGeometry(model: ModelDefinition): BufferGeometry {
       return new ExtrudeGeometry(shape, { depth, bevelEnabled: false, steps: 1 });
     }
   }
+}
+
+/** Example holes are real through-tunnels, including the model's mounting bores and receiving inserts. */
+const modelGeometryTemplates = new Map<string, BufferGeometry>();
+export function createModelGeometry(model: ModelDefinition): BufferGeometry {
+  const bores = [
+    ...getMountingHoles(model).map(hole => ({ position: hole.position, normal: [0, 0, 1] as Vec3, diameter: hole.diameter })),
+    ...getSupportFixings(model).holes.map(hole => ({ position: hole.position, normal: hole.normal, diameter: hole.diameter ?? Math.min(.012, ...model.dimensions.map(d => d * .18)) })),
+  ];
+  const uniqueBores = [...new Map(bores.map(bore => {
+    const normal = new Vector3(...bore.normal).normalize();
+    if (normal.z < 0 || (normal.z === 0 && (normal.y < 0 || (normal.y === 0 && normal.x < 0)))) normal.negate();
+    const origin = new Vector3(...bore.position).addScaledVector(normal, -new Vector3(...bore.position).dot(normal));
+    return [JSON.stringify([...origin.toArray(), ...normal.toArray(), bore.diameter].map(n => Math.round(n * 1e9))), bore];
+  })).values()];
+  const key = JSON.stringify([model.shape, model.dimensions, uniqueBores]);
+  const existing = modelGeometryTemplates.get(key);
+  if (existing) return existing.clone();
+  const geometry = perforateGeometry(createUnperforatedModelGeometry(model), uniqueBores);
+  if (modelGeometryTemplates.size >= 40) {
+    const oldest = modelGeometryTemplates.keys().next().value!;
+    modelGeometryTemplates.get(oldest)!.dispose(); modelGeometryTemplates.delete(oldest);
+  }
+  modelGeometryTemplates.set(key, geometry);
+  return geometry.clone();
+}
+
+function modelMountingErrors(model: ModelDefinition): string[] {
+  const errors: string[] = [];
+  const [width, height] = model.dimensions;
+  const holes = getMountingHoles(model), ids = new Set<string>();
+  const isBaseMaterial = (x: number, y: number) => {
+    if (Math.abs(x) >= width / 2 - SURFACE_EPSILON || Math.abs(y) >= height / 2 - SURFACE_EPSILON) return false;
+    if (['dome', 'jug', 'scoop'].includes(model.shape)) return (x / (width / 2)) ** 2 + (y / (height / 2)) ** 2 < 1 - SURFACE_EPSILON;
+    if (model.shape === 'pinch') {
+      const dx = Math.max(0, Math.abs(x) / (width / 2) - .65) / .35;
+      const dy = Math.max(0, Math.abs(y) / (height / 2) - .6) / .4;
+      return dx + dy < 1 - SURFACE_EPSILON;
+    }
+    return true;
+  };
+  for (const hole of holes) {
+    if (ids.has(hole.id)) errors.push(`Identifiant de trou de fixation dupliqué : ${model.id}, ${hole.id}`);
+    ids.add(hole.id);
+    for (let i = 0; i < 16; i++) {
+      const angle = i * Math.PI * 2 / 16;
+      if (!isBaseMaterial(hole.position[0] + Math.cos(angle) * hole.diameter / 2,
+        hole.position[1] + Math.sin(angle) * hole.diameter / 2)) {
+        errors.push(`Le trou de fixation ${hole.id} sort de la matière du modèle ${model.id}`); break;
+      }
+    }
+  }
+  if (model.mounting?.method === 'bolt' && !holes.some(h => h.role === 'primary')) {
+    errors.push(`Aucun trou principal de boulonnage sur le modèle ${model.id}`);
+  }
+  const supportIds = new Set<string>();
+  if (model.supportFixings?.holes.length) {
+    const geometry = createUnperforatedModelGeometry(model), attr = geometry.getAttribute('position'), index = geometry.getIndex();
+    const triangle = new Triangle(), a = new Vector3(), b = new Vector3(), c = new Vector3(), nearest = new Vector3(), normal = new Vector3();
+    try {
+      for (const hole of model.supportFixings.holes) {
+        if (supportIds.has(hole.id)) errors.push(`Identifiant d’insert dupliqué : ${model.id}, ${hole.id}`);
+        supportIds.add(hole.id);
+        const target = new Vector3(...hole.position), targetNormal = new Vector3(...hole.normal);
+        let found = false;
+        for (let i = 0; i < (index?.count ?? attr.count); i += 3) {
+          a.fromBufferAttribute(attr, index ? index.getX(i) : i);
+          b.fromBufferAttribute(attr, index ? index.getX(i + 1) : i + 1);
+          c.fromBufferAttribute(attr, index ? index.getX(i + 2) : i + 2);
+          triangle.set(a, b, c).getNormal(normal);
+          if (normal.dot(targetNormal) < .8 || (normal.z < -.99 && Math.max(a.z, b.z, c.z) < SURFACE_EPSILON)) continue;
+          triangle.closestPointToPoint(target, nearest);
+          if (nearest.distanceToSquared(target) <= SURFACE_EPSILON ** 2) { found = true; break; }
+        }
+        if (!found) errors.push(`L’insert ${hole.id} ne correspond pas à une face du modèle ${model.id}`);
+      }
+    } finally { geometry.dispose(); }
+  }
+  return errors;
 }
 
 export interface WorldPose { position: Vec3; rotation: Quat }
@@ -290,6 +374,10 @@ function createPoseResolver(scene: SceneDocument): (id: string) => WorldPose {
 
 /** Surface test independent of the rendering scene. Ignores the back mounting face. */
 export function isPointOnModelSurface(model: ModelDefinition, point: Vec3, rotation: Quat): boolean {
+  // A receiving insert is an admissible anchor even though its centre is an actual tunnel.
+  const targetNormal = new Vector3(0, 0, 1).applyQuaternion(new Quaternion(...rotation));
+  if (getSupportFixings(model).holes.some(hole => new Vector3(...hole.position).distanceTo(new Vector3(...point)) <= SURFACE_EPSILON &&
+    targetNormal.dot(new Vector3(...hole.normal)) > .999)) return true;
   const geometry = createModelGeometry(model);
   const position = geometry.getAttribute('position');
   const index = geometry.getIndex();
@@ -313,10 +401,10 @@ export function isPointOnModelSurface(model: ModelDefinition, point: Vec3, rotat
   } finally { geometry.dispose(); }
 }
 
-export function validateScene(scene: SceneDocument, options: { collisions?: boolean } = {}): string[] {
+export function validateScene(scene: SceneDocument, options: { collisions?: boolean; mounting?: boolean } = {}): string[] {
   const parsed = sceneSchema.safeParse(scene);
   if (!parsed.success) return parsed.error.issues.map(issue => `${issue.path.join('.')} : ${issue.message}`);
-  const errors: string[] = [];
+  const errors: string[] = [...validateRoomLayout(scene)];
   const allIds = new Set<string>();
   for (const item of [...scene.walls, ...scene.models, ...scene.placements, ...scene.boulders]) {
     if (allIds.has(item.id)) errors.push(`Identifiant dupliqué : ${item.id}`);
@@ -327,6 +415,7 @@ export function validateScene(scene: SceneDocument, options: { collisions?: bool
   const placements = new Map(scene.placements.map(p => [p.id, p]));
   const resolvePose = createPoseResolver(scene);
   for (const wall of scene.walls) errors.push(...wallErrors(wall));
+  for (const model of scene.models) errors.push(...modelMountingErrors(model));
   for (const placement of scene.placements) {
     const model = models.get(placement.modelId);
     if (!model) { errors.push(`Modèle introuvable : ${placement.modelId}`); continue; }
@@ -353,6 +442,7 @@ export function validateScene(scene: SceneDocument, options: { collisions?: bool
     }
     try { resolvePose(placement.id); } catch (error) { errors.push((error as Error).message); }
   }
+  if (options.mounting) for (const placement of scene.placements) errors.push(...validatePlacementMounting(scene, placement));
   for (const boulder of scene.boulders) {
     const ids = new Set(boulder.placementIds);
     if (ids.size !== boulder.placementIds.length) errors.push(`Prise dupliquée dans le bloc : ${boulder.id}`);
@@ -498,6 +588,13 @@ export function validateSceneChange(previous: SceneDocument, next: SceneDocument
   const errors = validateScene(next, { collisions: false });
   if (errors.length) return errors;
   const key = (pair: CollisionPair) => JSON.stringify([pair.firstId, pair.secondId]);
+  const oldPlacements = new Map(previous.placements.map(p => [p.id, p]));
+  for (const placement of next.placements) {
+    const previousPlacement = oldPlacements.get(placement.id);
+    if (!previousPlacement || mountingFingerprint(previous, previousPlacement) !== mountingFingerprint(next, placement)) {
+      errors.push(...validatePlacementMounting(next, placement));
+    }
+  }
   const oldPairs = new Set(findSceneCollisions(previous).map(key));
   for (const pair of findSceneCollisions(next)) {
     if (!oldPairs.has(key(pair)) || solidFingerprint(previous, pair.firstId) !== solidFingerprint(next, pair.firstId) ||

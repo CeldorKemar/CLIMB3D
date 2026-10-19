@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export const vector3Schema = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
 export type Vec3 = z.infer<typeof vector3Schema>;
+export const vector2Schema = z.tuple([z.number().finite(), z.number().finite()]);
+export type Vec2 = z.infer<typeof vector2Schema>;
 export const quaternionSchema = z.tuple([z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite()])
   .refine(q => Math.abs(Math.hypot(...q) - 1) < 0.001, 'Rotation non normalisée');
 export type Quat = z.infer<typeof quaternionSchema>;
@@ -38,6 +40,34 @@ export const fixingGridSchema = z.object({
   rotationDegrees: z.number().finite().optional(),
 }).strict();
 
+/** Positions are metres in the model's mounting plane; holes are supplied by the model, never drilled by the editor. */
+export const mountingHoleSchema = z.object({
+  id,
+  position: vector3Schema.refine(p => Math.abs(p[2]) < 0.000001, 'Un trou de fixation doit partir du plan de montage z=0'),
+  diameter: z.number().finite().min(0.001).max(0.1),
+  role: z.enum(['primary', 'auxiliary']),
+}).strict();
+export type MountingHole = z.infer<typeof mountingHoleSchema>;
+export const mountingSchema = z.object({
+  method: z.enum(['bolt', 'screw']),
+  holes: z.array(mountingHoleSchema).min(1).max(30),
+  threadDesignation: z.string().min(1).max(80).optional(),
+}).strict();
+export type ModelMounting = z.infer<typeof mountingSchema>;
+export const supportFixingHoleSchema = z.object({
+  id,
+  position: vector3Schema,
+  normal: vector3Schema.refine(v => Math.abs(Math.hypot(...v) - 1) < 0.001, 'Normale de fixation non normalisée'),
+  diameter: z.number().finite().min(0.001).max(0.1).optional(),
+  threadDesignation: z.string().min(1).max(80).optional(),
+}).strict();
+export type SupportFixingHole = z.infer<typeof supportFixingHoleSchema>;
+export const supportFixingsSchema = z.object({
+  allowScrews: z.boolean(),
+  holes: z.array(supportFixingHoleSchema).max(4000),
+}).strict();
+export type SupportFixings = z.infer<typeof supportFixingsSchema>;
+
 export const modelSchema = z.object({
   id,
   version: z.literal(1),
@@ -49,6 +79,8 @@ export const modelSchema = z.object({
   source: z.object({ type: z.literal('parametric'), generatorVersion: z.literal(1) }).strict(),
   fixing: fixingMetadataSchema.optional(),
   fixingGrid: fixingGridSchema.optional(),
+  mounting: mountingSchema.optional(),
+  supportFixings: supportFixingsSchema.optional(),
 }).strict();
 export type ModelDefinition = z.infer<typeof modelSchema>;
 
@@ -74,6 +106,8 @@ export const wallSchema = z.object({
   fixingSpacing: z.number().finite().min(0.1).max(1),
   fixing: fixingMetadataSchema.optional(),
   fixingGrid: fixingGridSchema.optional(),
+  supportFixings: supportFixingsSchema.optional(),
+  levelId: id.optional(),
 }).strict();
 export type WallDefinition = z.infer<typeof wallSchema>;
 
@@ -99,6 +133,25 @@ export const boulderSchema = z.object({
 }).strict();
 export type BoulderDefinition = z.infer<typeof boulderSchema>;
 
+export const roomLevelSchema = z.object({
+  id,
+  name: z.string().min(1).max(100),
+  elevation: z.number().finite().min(-100).max(100),
+  outline: z.array(vector2Schema).min(3).max(100),
+}).strict();
+export type RoomLevel = z.infer<typeof roomLevelSchema>;
+export const roomStairSchema = z.object({
+  id,
+  name: z.string().min(1).max(100),
+  fromLevelId: id,
+  toLevelId: id,
+  start: vector2Schema,
+  end: vector2Schema,
+  width: z.number().finite().min(0.2).max(20),
+  steps: z.number().int().min(2).max(200).optional(),
+}).strict();
+export type RoomStair = z.infer<typeof roomStairSchema>;
+
 export const sceneSchema = z.object({
   schemaVersion: z.literal(1),
   name: z.string().min(1).max(120),
@@ -108,6 +161,8 @@ export const sceneSchema = z.object({
   models: z.array(modelSchema).max(300),
   placements: z.array(placementSchema).max(3000),
   boulders: z.array(boulderSchema).max(300),
+  levels: z.array(roomLevelSchema).min(1).max(20).optional(),
+  stairs: z.array(roomStairSchema).max(50).optional(),
 }).strict();
 export type SceneDocument = z.infer<typeof sceneSchema>;
 

@@ -1627,7 +1627,7 @@ button svg {
   justify-content: center;
   background: #152f2466;
   backdrop-filter: blur(4px);
-  z-index: 10;
+  z-index: 1100;
   padding: 30px;
 }
 .modal {

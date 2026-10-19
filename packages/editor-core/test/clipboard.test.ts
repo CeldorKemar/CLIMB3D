@@ -98,20 +98,24 @@ describe('presse-papiers de conception', () => {
     const result = createSelectionCopy(scene, copySelection(scene, 'hold'), ids(), 2);
     const copy = result.scene.placements.at(-1)!;
     expect(copy.parentId).toBe('wall-main');
-    expect(copy.position).toEqual([.54, 2.5, 0]);
+    expect(copy.position).toEqual([.5, 2.5, 0]);
     expect(result.addedPlacementIds).toEqual([copy.id]);
-    expect(getWorldPose(result.scene, copy.id).position).toEqual([1.54, 2.5, -2]);
+    expect(getWorldPose(result.scene, copy.id).position).toEqual([1.5, 2.5, -2]);
   });
 
   it('une prise sur volume reste sur ce volume, puis refuse le collage si le support a été supprimé', () => {
     const scene = fixture();
     scene.placements[1]!.position = [-.05, 0, .25];
+    scene.models.find(m => m.id === 'volume-box')!.supportFixings = { allowScrews: true, holes: [
+      { id: 'left', position: [-.05, 0, .25], normal: [0, 0, 1] },
+      { id: 'right', position: [.25, 0, .25], normal: [0, 0, 1] },
+    ] };
     const clipboard = copySelection(scene, 'child');
     const result = createSelectionCopy(scene, clipboard, ids());
     const copy = result.scene.placements.at(-1)!;
     expect(copy.parentType).toBe('volume');
     expect(copy.parentId).toBe('volume');
-    expect(copy.position[0]).toBeCloseTo(.23);
+    expect(copy.position[0]).toBeCloseTo(.25);
     expect(copy.position.slice(1)).toEqual([0, .25]);
     scene.placements = scene.placements.filter(p => p.id === 'hold');
     scene.boulders = [];

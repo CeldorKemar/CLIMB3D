@@ -144,7 +144,7 @@ test('une conception théorique peut être sauvegardée mais sa restauration ref
     const stock = original.inventory.find(value => value.modelId === 'hold-jug')!;
     expect(stock.available, 'Fixture : 12 bacs disponibles').toBe(12);
     const scene = emptyScene(original.scene);
-    for (let index = 0; index < 13; index++) place(scene, `qa-shortage-${index}`, 'hold-jug', -2 + index % 5, 0.6 + Math.floor(index / 5));
+    for (let index = 0; index < 13; index++) place(scene, `qa-shortage-${index}`, 'hold-jug', -2 + index % 5, 0.5 + Math.floor(index / 5));
     await save(actor, scene);
     const saved = await snapshot(actor, 'room');
     const before = await save(actor, emptyScene(scene));

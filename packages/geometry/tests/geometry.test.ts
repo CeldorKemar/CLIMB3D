@@ -63,13 +63,15 @@ describe('solid walls and actual openings', () => {
 });
 
 describe('parametric models', () => {
-  it.each(demoModels)('$shape has requested dimensions and positive solid volume', (model) => {
+  it.each(demoModels)('$shape respects its dimensional envelope and has positive solid volume', (model) => {
     const geometry = createModelGeometry(model);
     geometry.computeBoundingBox();
     const size = geometry.boundingBox!.getSize(new Vector3());
     expect(size.x).toBeCloseTo(model.dimensions[0], 5);
     expect(size.y).toBeCloseTo(model.dimensions[1], 5);
-    expect(size.z).toBeCloseTo(model.dimensions[2], 5);
+    // A through-bore at a dome's apex physically removes its highest point.
+    expect(size.z).toBeLessThanOrEqual(model.dimensions[2] + 0.000001);
+    expect(size.z).toBeGreaterThan(model.dimensions[2] * .98);
     expect(geometry.boundingBox!.min.z).toBeCloseTo(0, 6);
     expect(geometry.boundingBox!.getCenter(new Vector3()).x).toBeCloseTo(0);
     expect(signedVolume(geometry)).toBeGreaterThan(0);

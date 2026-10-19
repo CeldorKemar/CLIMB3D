@@ -159,3 +159,32 @@ Nouvelle tentative réelle vers neuf destinations fabricant/PDF/forum le 19 octo
 La proposition à décider est de séparer les fixations de l’objet et les points/surfaces récepteurs du support : placement boulonné sur insert avec rotation, placement vissé sur zone autorisée et information inconnue explicitement signalée. Aucun nouveau moteur de montage ni profil fabricant n’est activé avant cette décision et la lecture de documents exploitables. Les pyramides génériques du POC ne reproduisent pas encore des coques constructeur creuses.
 
 Le point de retour avant ce complément est `221ee89`. La mise à jour reste sur `poc/climbed-3d`, sans déploiement public.
+
+## Derniers retours — sélection multiple, voies, plan, niveaux et montage
+
+### Réalisation
+
+- Ctrl + clic gauche ajoute ou retire des pièces de la sélection. La sélection multiple affiche uniquement la suppression groupée ; les transformations et copies groupées sont désactivées. La suppression nettoie les descendants et les références de voies en une commande annulable.
+- La suppression d’une voie propose de supprimer ses pièces exclusives. La confirmation annonce les pièces partagées et les volumes supports conservés. Cette modification de conception ne libère aucun stock physique.
+- Minimap en bas à droite avec positions XZ réelles, inclinaison, orientation et épaisseur des pans ; masquage, agrandissement, filtrage par niveau et clic pour cadrer le pan en 3D. Le plan agrandi gère le focus, Tab et Échap.
+- Sols finis, niveaux nommés avec altitude, rattachement des pans et escaliers droits. Changer l’altitude transporte les pans du niveau et conserve les ancres locales de leurs enfants. Sauvegarde, rechargement et historique conservent ces données.
+- Perçages réels des modèles paramétriques, avec parois intérieures. Boulonnage sur inserts compatibles, vissage sur surface autorisée et vérification des fixations complémentaires. Aperçu vert ou rouge avec motifs, refus au clic et validation commune côté API. Un insert traversant de volume reste ciblable même sans afficher la grille.
+- Compatibilité des anciens documents sans réécriture des modèles ou de leur empreinte d’inventaire. Les anciennes ancres inchangées sont conservées ; les nouvelles ancres, y compris celles réintroduites par restauration, respectent les fixations. Les copies de pièces sont accrochées à un insert compatible avant contrôle du changement entier.
+- Restauration de voie : import du niveau requis lorsqu’il manque ; refus d’écraser un niveau incompatible utilisé par d’autres pans ou escaliers. Les escaliers courants sont préservés.
+
+### Vérifications
+
+- `npm test` : **123/123 réussis**, aucun skip : 55 géométrie et disposition, 27 commandes/historique/copie, 6 planification pure et 35 intégrations PostgreSQL réelles dans une base dédiée.
+- `npm run build` : tous les typechecks et compilation web réussis. Aucune nouvelle dépendance. Atelier : environ 1,110 Mo brut, 297 ko gzip ; avertissement de taille Vite conservé.
+- Playwright final : **35/35 réussis en 2,6 min**, sans skip, dont 12 parcours HTTP et 23 parcours Chromium avec WebGL. Les sept scénarios du nouveau lot passent avec les 28 précédents, contre une base distincte et un serveur compilé sans watch sur 3002.
+- Les essais intermédiaires ont révélé puis permis de corriger l’empreinte de pan sans épaisseur dans la minimap, son empilement devant les fenêtres modales, le ciblage à travers un insert de volume et l’attente de dimensionnement initial du canvas dans les tests. La finale conserve toutes les assertions de comportement.
+- Le serveur habituel 3001 a été redémarré avec les règles actuelles. Connexion, chargement de l’atelier et du panneau niveaux sans mutation ni erreur JavaScript. Captures actuelles : `docs/assets/poc-editor.png` et `docs/assets/poc-levels.png`.
+- Les trois salles de développement conservent leurs révisions et placements : 51/38, 20/38 et 3/10. Aucune migration SQL nouvelle ni réinitialisation des données de développement.
+
+### Limites actuelles
+
+Les profils de fixation sont des exemples synthétiques. Les notices fournisseur restent inaccessibles et aucune nouvelle cote fabricant n’est revendiquée. L’éditeur de catalogue ne permet pas encore de saisir toutes les interfaces de montage détaillées ; le contrat les accepte pour les profils futurs. Les pyramides génériques ne reproduisent pas les coques creuses d’un produit constructeur.
+
+L’interface de sol édite des rectangles et les escaliers sont droits ; aucune trémie automatique, raccord architectural ou vérification réglementaire n’est fournie. Les collisions entre pièces et pans restent contrôlées ; les sols et escaliers sont des éléments de disposition, sans solveur de collision architectural. Les essais Chromium à rendu logiciel ne valident pas la fluidité sur un laptop Windows réel.
+
+Le point de retour avant ce lot est `50086c4`. La livraison reste sur `poc/climbed-3d`, sans déploiement externe. Les sections précédentes conservent les résultats historiques de chaque lot ; elles ne décrivent pas toutes les fonctions de cette révision.

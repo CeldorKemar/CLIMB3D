@@ -128,7 +128,7 @@ test('un volume appartient à plusieurs voies et reste visible tant qu’une de 
     scene.placements = [
       { id: 'qa-shared-volume', modelId: 'volume-box', modelVersion: 1, parentType: 'wall', parentId: scene.walls[0]!.id, position: [-0.8, 2, 0], rotation: [0, 0, 0, 1] },
       { id: 'qa-route-a-hold', modelId: 'hold-crimp', modelVersion: 1, parentType: 'wall', parentId: scene.walls[0]!.id, position: [-1.5, 1, 0], rotation: [0, 0, 0, 1] },
-      { id: 'qa-route-b-hold', modelId: 'hold-pinch', modelVersion: 1, parentType: 'wall', parentId: scene.walls[0]!.id, position: [1.2, 1, 0], rotation: [0, 0, 0, 1] },
+      { id: 'qa-route-b-hold', modelId: 'hold-pinch', modelVersion: 1, parentType: 'wall', parentId: scene.walls[0]!.id, position: [1.25, 1, 0], rotation: [0, 0, 0, 1] },
     ];
     scene.boulders = [
       { id: 'qa-route-a', name: 'Voie 1', grade: '5c', color: '#f07c54', placementIds: ['qa-shared-volume', 'qa-route-a-hold'], startIds: [], finishIds: [] },
@@ -178,7 +178,8 @@ test('un déplacement en collision est refusé et laisse les prises séparées',
     const bounds = (await canvas.boundingBox())!;
     await page.getByTestId('catalog-hold-jug').click();
     await canvas.click({ position: { x: bounds.width / 2, y: bounds.height / 2 } });
-    await canvas.click({ position: { x: bounds.width / 2 - 65, y: bounds.height / 2 + 65 } });
+    const metre = bounds.height / (24 * Math.tan(21 * Math.PI / 180));
+    await canvas.click({ position: { x: bounds.width / 2 - metre, y: bounds.height / 2 + metre } });
     await expect(page.getByTestId('placement-count')).toHaveText('2 éléments');
     await page.keyboard.press('Escape');
     await confirmSave(page);

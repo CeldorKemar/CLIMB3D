@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
+  Building2,
   Check,
   ChevronDown,
   ChevronRight,
@@ -33,10 +34,10 @@ import { useEditor } from "../hooks/useEditor";
 import { remainingStock } from "../domain/stock";
 import { describeSceneProblems } from "../domain/diagnostics";
 import {
-  applyCommand,
   copySelection,
   createSelectionCopy,
   InvalidSceneError,
+  removeSelection,
   type SceneClipboard,
 } from "@climbed/editor-core";
 import {
@@ -51,6 +52,8 @@ import { StockPanel } from "./StockPanel";
 import { CatalogEditor } from "./CatalogEditor";
 import { MultiWallBuilder } from "./MultiWallBuilder";
 import { HistoryPanel } from "./HistoryPanel";
+import { RoomMap } from "./RoomMap";
+import { LevelsPanel } from "./LevelsPanel";
 interface Props {
   session: BootstrapResponse;
   roomId: string;
@@ -73,13 +76,18 @@ export function Workspace({
     revision: initial.revision,
   });
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
   const [editorView, setEditorView] = useState<"room" | "catalog">("room");
-  const [rightTab, setRightTab] = useState<"design" | "stock" | "history">(
-    "design",
-  );
+  const [rightTab, setRightTab] = useState<
+    "design" | "stock" | "history" | "levels"
+  >("design");
   const [grid, setGrid] = useState(true);
-  const [view, setView] = useState<{ mode: ViewMode; seq: number }>({
+  const [view, setView] = useState<{
+    mode: ViewMode;
+    seq: number;
+    wallId?: string;
+  }>({
     mode: "perspective",
     seq: 0,
   });
@@ -106,9 +114,22 @@ export function Workspace({
     [room.inventory],
   );
   const collisions = useMemo(() => findSceneCollisions(scene), [scene]);
-  function select(id: string | null) {
+  function setSelection(ids: string[]) {
+    setSelectedIds(ids);
+    setSelected(ids.at(-1) ?? null);
+  }
+  function select(id: string | null, additive = false) {
     setActiveModelId(null);
-    setSelected(id);
+    if (additive && id && scene.placements.some((p) => p.id === id)) {
+      const existing = selectedIds.filter((key) =>
+        scene.placements.some((p) => p.id === key),
+      );
+      setSelection(
+        existing.includes(id)
+          ? existing.filter((key) => key !== id)
+          : [...existing, id],
+      );
+    } else setSelection(id ? [id] : []);
   }
   function openCatalog() {
     setActiveModelId(null);
@@ -117,18 +138,18 @@ export function Workspace({
   function changeView(mode: ViewMode) {
     setView((old) => ({ mode, seq: old.seq + 1 }));
   }
-  function navigate(tab: "design" | "stock" | "history") {
+  function navigate(tab: "design" | "stock" | "history" | "levels") {
     setEditorView("room");
     setRightTab(tab);
   }
   useEffect(() => {
-    if (
-      selected &&
-      !scene.walls.some((w) => w.id === selected) &&
-      !scene.placements.some((p) => p.id === selected)
-    )
-      setSelected(null);
-  }, [scene, selected]);
+    const retained = selectedIds.filter(
+      (id) =>
+        scene.walls.some((w) => w.id === id) ||
+        scene.placements.some((p) => p.id === id),
+    );
+    if (retained.length !== selectedIds.length) setSelection(retained);
+  }, [scene, selectedIds]);
   useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
       if (busy || e.defaultPrevented || e.isComposing) return;
@@ -159,14 +180,21 @@ export function Workspace({
         return;
       }
       if (editorView !== "room") return;
-      if (modifier && !e.shiftKey && e.key.toLowerCase() === "c" && selected) {
+      if (
+        modifier &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "c" &&
+        selected &&
+        selectedIds.length <= 1
+      ) {
         e.preventDefault();
         copySelected();
       } else if (
         modifier &&
         !e.shiftKey &&
         e.key.toLowerCase() === "v" &&
-        clipboard.current
+        clipboard.current &&
+        selectedIds.length <= 1
       ) {
         e.preventDefault();
         pasteCopied();
@@ -174,7 +202,8 @@ export function Workspace({
         modifier &&
         !e.shiftKey &&
         e.key.toLowerCase() === "d" &&
-        selected
+        selected &&
+        selectedIds.length <= 1
       ) {
         e.preventDefault();
         if (copySelected(false)) pasteCopied();
@@ -194,6 +223,7 @@ export function Workspace({
   }, [
     scene,
     selected,
+    selectedIds,
     remaining,
     editorView,
     help,
@@ -229,7 +259,7 @@ export function Workspace({
           !result.scene.placements.some((p) => p.id === selected) &&
           !result.scene.walls.some((w) => w.id === selected)
         )
-          setSelected(null);
+          setSelection([]);
       }
       if (!replaceScene && result.revision !== base.revision) {
         setError(
@@ -338,11 +368,9 @@ export function Workspace({
     }
   }
   function deleteSelected() {
-    if (!selected) return;
-    const command = scene.walls.some((w) => w.id === selected)
-      ? { type: "remove-wall" as const, id: selected }
-      : { type: "remove-placement" as const, id: selected };
-    if (edit((d) => Object.assign(d, applyCommand(d, command)))) {
+    const ids = selectedIds.length ? selectedIds : selected ? [selected] : [];
+    if (!ids.length) return;
+    if (edit((d) => Object.assign(d, removeSelection(d, ids)))) {
       select(null);
       setError("");
     }
@@ -366,44 +394,19 @@ export function Workspace({
       const route = d.boulders.find((b) => b.id === activeBoulderId);
       if (route) route.placementIds.push(id);
     });
-    if (accepted) setSelected(id);
+    if (accepted) setSelection([id]);
   }
   function duplicatePlacement(id: string) {
-    const source = scene.placements.find((p) => p.id === id);
-    if (!source) return;
-    const copies = [
-      source,
-      ...scene.placements.filter(
-        (p) => p.parentType === "volume" && p.parentId === id,
-      ),
-    ];
-    const counts = new Map<string, number>();
-    for (const p of copies)
-      counts.set(p.modelId, (counts.get(p.modelId) ?? 0) + 1);
-    for (const [modelId, count] of counts)
-      if ((remaining.get(modelId) ?? 0) < count) {
-        setError(
-          `Stock insuffisant pour dupliquer : ${scene.models.find((m) => m.id === modelId)?.name ?? modelId}.`,
-        );
-        return;
-      }
-    const ids = new Map(copies.map((p) => [p.id, crypto.randomUUID()]));
-    const model = scene.models.find((m) => m.id === source.modelId)!;
-    const accepted = edit((d) => {
-      for (const p of copies) {
-        const copy = structuredClone(p);
-        copy.id = ids.get(p.id)!;
-        if (p.id === id) copy.position[0] += model.dimensions[0] + 0.08;
-        else copy.parentId = ids.get(p.parentId)!;
-        d.placements.push(copy);
-      }
-      for (const route of d.boulders) {
-        for (const original of copies)
-          if (route.placementIds.includes(original.id))
-            route.placementIds.push(ids.get(original.id)!);
-      }
-    });
-    if (accepted) setSelected(ids.get(id)!);
+    select(id);
+    try {
+      clipboard.current = {
+        content: copySelection(scene, id),
+        nextPasteIndex: 1,
+      };
+      pasteCopied();
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }
   function addWall() {
     const id = crypto.randomUUID();
@@ -586,6 +589,17 @@ export function Workspace({
           >
             <History size={22} />
           </button>
+          <button
+            data-testid="nav-levels"
+            className={
+              editorView === "room" && rightTab === "levels" ? "active" : ""
+            }
+            title="Sols et niveaux"
+            aria-label="Sols et niveaux"
+            onClick={() => navigate("levels")}
+          >
+            <Building2 size={22} />
+          </button>
           <div className="rail-spacer" />
           <button
             title="Aide de l’éditeur"
@@ -620,7 +634,7 @@ export function Workspace({
               }}
               onModel={(m) => {
                 setActiveModelId(m?.id ?? null);
-                setSelected(null);
+                setSelection([]);
               }}
               onAddWall={addWall}
               onAddChain={() => setChainOpen(true)}
@@ -663,12 +677,31 @@ export function Workspace({
                 <SceneCanvas
                   scene={scene}
                   selected={selected}
+                  selectedIds={selectedIds}
                   activeModel={activeModel}
                   grid={grid}
                   view={view}
                   onSelect={select}
                   onPlace={place}
                   hiddenRouteIds={hiddenRouteIds}
+                  remainingStock={remaining}
+                />
+                <RoomMap
+                  scene={scene}
+                  selectedWallId={
+                    scene.walls.some((w) => w.id === selected)
+                      ? (selected ?? undefined)
+                      : undefined
+                  }
+                  onFocusWall={(wallId) => {
+                    select(wallId);
+                    setRightTab("design");
+                    setView((old) => ({
+                      mode: "front",
+                      seq: old.seq + 1,
+                      wallId,
+                    }));
+                  }}
                 />
                 <div className="viewport-tools">
                   <button
@@ -774,10 +807,15 @@ export function Workspace({
                     <Warehouse size={15} />
                     Stock & suivi
                   </>
-                ) : (
+                ) : rightTab === "history" ? (
                   <>
                     <History size={15} />
                     Historique des conceptions
+                  </>
+                ) : (
+                  <>
+                    <Building2 size={15} />
+                    Sols et niveaux
                   </>
                 )}
               </div>
@@ -785,6 +823,8 @@ export function Workspace({
                 <PropertiesPanel
                   scene={scene}
                   selected={selected}
+                  selectedIds={selectedIds}
+                  onDeleteSelection={deleteSelected}
                   edit={edit}
                   onSelect={select}
                   activeBoulderId={activeBoulderId}
@@ -801,6 +841,18 @@ export function Workspace({
                   busy={busy}
                   reserve={reserve}
                   action={reservationAction}
+                />
+              ) : rightTab === "levels" ? (
+                <LevelsPanel
+                  scene={scene}
+                  selectedWallId={
+                    scene.walls.some((w) => w.id === selected)
+                      ? (selected ?? undefined)
+                      : undefined
+                  }
+                  onChange={(next) => {
+                    edit((d) => Object.assign(d, next));
+                  }}
                 />
               ) : (
                 <HistoryPanel

@@ -17,7 +17,12 @@ export async function enterWorkshop(page: Page, options: { reuseSession?: boolea
     await page.getByLabel('Mot de passe', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Entrer dans l’atelier' }).click();
   }
-  await expect(page.getByTestId('editor-canvas').locator('canvas')).toBeVisible();
+  const canvas = page.getByTestId('editor-canvas').locator('canvas');
+  await expect(canvas).toBeVisible();
+  // React Three Fiber mounts a native 300×150 canvas before its ResizeObserver
+  // fits the workshop. Coordinates captured during that first frame click the wrong surface.
+  await expect.poll(async () => (await canvas.boundingBox())?.width ?? 0).toBeGreaterThan(400);
+  await expect.poll(async () => (await canvas.boundingBox())?.height ?? 0).toBeGreaterThan(300);
   await page.getByTestId('view-front').click();
   await expect(page.getByTestId('view-front')).toHaveClass(/active/);
 }

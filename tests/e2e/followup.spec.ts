@@ -269,8 +269,8 @@ test('le mur composé détaille chaque collision distincte dans sa fenêtre et c
   try {
     const scene = emptyRoom(original.scene);
     scene.placements = [
-      { id: 'qa-chain-collision-left', modelId: 'hold-jug', modelVersion: 1, parentType: 'wall', parentId: scene.walls[0]!.id, position: [-0.8, 0.5, 0], rotation: [0, 0, 0, 1] },
-      { id: 'qa-chain-collision-right', modelId: 'hold-crimp', modelVersion: 1, parentType: 'wall', parentId: scene.walls[0]!.id, position: [0.8, 0.5, 0], rotation: [0, 0, 0, 1] },
+      { id: 'qa-chain-collision-left', modelId: 'hold-jug', modelVersion: 1, parentType: 'wall', parentId: scene.walls[0]!.id, position: [-0.75, 0.5, 0], rotation: [0, 0, 0, 1] },
+      { id: 'qa-chain-collision-right', modelId: 'hold-crimp', modelVersion: 1, parentType: 'wall', parentId: scene.walls[0]!.id, position: [0.75, 0.5, 0], rotation: [0, 0, 0, 1] },
     ];
     const prepared = await save(actor, scene);
     await enterWorkshop(page, { reuseSession: true });

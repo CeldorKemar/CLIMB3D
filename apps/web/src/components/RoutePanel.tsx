@@ -1,5 +1,10 @@
-import { Eye, Plus, Trash2, Flag, Crosshair } from "lucide-react";
+import { useState } from "react";
+import { Eye, Plus, Trash2, Flag, Crosshair, X } from "lucide-react";
 import type { SceneDocument } from "@climbed/contracts";
+import {
+  planRouteRemoval,
+  removeRouteWithPlacements,
+} from "@climbed/editor-core";
 import type { Edit } from "../domain/editor";
 interface Props {
   scene: SceneDocument;
@@ -19,7 +24,15 @@ export function RoutePanel({
   hiddenIds,
   setHiddenIds,
 }: Props) {
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const active = scene.boulders.find((b) => b.id === activeId);
+  const removing = scene.boulders.find((route) => route.id === removingId);
+  const removalPlan = removing ? planRouteRemoval(scene, removing.id) : null;
+  const describePieces = (ids: string[]) =>
+    ids.map((id) => {
+      const placement = scene.placements.find((item) => item.id === id);
+      return `${scene.models.find((model) => model.id === placement?.modelId)?.name ?? id} (${id.slice(0, 8)})`;
+    });
   const placement = scene.placements.find((p) => p.id === selected);
   const isHold =
     scene.models.find((m) => m.id === placement?.modelId)?.kind === "hold";
@@ -146,6 +159,14 @@ export function RoutePanel({
             <Trash2 size={12} />
             Supprimer la voie sans retirer ses éléments
           </button>
+          <button
+            className="danger-button"
+            data-testid="route-delete-with-pieces"
+            onClick={() => setRemovingId(active.id)}
+          >
+            <Trash2 size={12} />
+            Supprimer la voie avec ses éléments
+          </button>
         </>
       )}
       {placement && (
@@ -208,6 +229,99 @@ export function RoutePanel({
               ))}
             </div>
           )}
+        </div>
+      )}
+      {removing && removalPlan && (
+        <div className="modal-backdrop" onClick={() => setRemovingId(null)}>
+          <section
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="route-removal-title"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setRemovingId(null);
+            }}
+          >
+            <button
+              className="icon-button modal-close"
+              aria-label="Fermer la suppression de voie"
+              onClick={() => setRemovingId(null)}
+            >
+              <X size={18} />
+            </button>
+            <h2 id="route-removal-title">
+              Supprimer {removing.name} et ses éléments ?
+            </h2>
+            <p>
+              {removalPlan.removedIds.length} élément(s) seront retirés du
+              projet avec cette voie. Cette action peut être annulée.
+            </p>
+            {removalPlan.removedIds.length > 0 && (
+              <details>
+                <summary>Éléments à supprimer</summary>
+                <ul>
+                  {describePieces(removalPlan.removedIds).map((name, index) => (
+                    <li key={removalPlan.removedIds[index]}>{name}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {removalPlan.sharedIds.length > 0 && (
+              <>
+                <p>
+                  {removalPlan.sharedIds.length} élément(s) conservés car
+                  partagés avec d’autres voies :
+                </p>
+                <ul data-testid="route-removal-shared">
+                  {describePieces(removalPlan.sharedIds).map((name, index) => (
+                    <li key={removalPlan.sharedIds[index]}>{name}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {removalPlan.supportIds.length > 0 && (
+              <>
+                <p>
+                  {removalPlan.supportIds.length} volume(s) conservés pour
+                  soutenir des éléments d’une autre voie ou sans voie :
+                </p>
+                <ul data-testid="route-removal-supports">
+                  {describePieces(removalPlan.supportIds).map((name, index) => (
+                    <li key={removalPlan.supportIds[index]}>{name}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <p className="small-muted">
+              Le stock physique réservé ou installé reste inchangé. Utilisez le
+              suivi pour confirmer un démontage et un retour en réserve.
+            </p>
+            <div>
+              <button className="secondary" onClick={() => setRemovingId(null)}>
+                Annuler
+              </button>
+              <button
+                className="danger-button"
+                data-testid="route-delete-confirm"
+                onClick={() => {
+                  edit((draft) =>
+                    Object.assign(
+                      draft,
+                      removeRouteWithPlacements(draft, removing.id),
+                    ),
+                  );
+                  if (activeId === removing.id) setActiveId(null);
+                  setHiddenIds(hiddenIds.filter((id) => id !== removing.id));
+                  setRemovingId(null);
+                }}
+              >
+                <Trash2 size={14} />
+                Supprimer la voie et ses {removalPlan.removedIds.length}{" "}
+                élément(s)
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </div>

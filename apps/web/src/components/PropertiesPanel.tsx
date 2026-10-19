@@ -1,5 +1,6 @@
 import { Copy, Crosshair, Plus, Trash2, CircleHelp } from "lucide-react";
 import { Quaternion, Vector3 } from "three";
+import { removeSelection } from "@climbed/editor-core";
 import {
   getWallAngles,
   quaternionFromWallAngles,
@@ -13,6 +14,8 @@ import { RoutePanel } from "./RoutePanel";
 interface Props {
   scene: SceneDocument;
   selected: string | null;
+  selectedIds?: string[];
+  onDeleteSelection?: () => void;
   edit: (fn: Edit) => void;
   onSelect: (id: string | null) => void;
   activeBoulderId: string | null;
@@ -24,6 +27,8 @@ interface Props {
 export function PropertiesPanel({
   scene,
   selected,
+  selectedIds = [],
+  onDeleteSelection,
   edit,
   onSelect,
   activeBoulderId,
@@ -52,6 +57,53 @@ export function PropertiesPanel({
     ? (2 * Math.atan2(placement.rotation[2], placement.rotation[3]) * 180) /
       Math.PI
     : 0;
+  if (selectedIds.length > 1) {
+    const placements = scene.placements.filter((item) =>
+      selectedIds.includes(item.id),
+    );
+    return (
+      <div className="properties-content" data-testid="multi-selection-panel">
+        <div className="inspector-title">
+          <span className="eyebrow">SÉLECTION MULTIPLE</span>
+          <h3>{selectedIds.length} éléments sélectionnés</h3>
+        </div>
+        <div className="property-section">
+          <p className="small-muted">
+            Ctrl + clic pour ajouter ou retirer une pièce de la sélection. Suppr
+            ou Retour arrière pour supprimer la sélection en une seule action.
+          </p>
+          <p className="small-muted">
+            Les prises fixées sur un volume supprimé sont également retirées.
+            Annuler restaure toute la sélection.
+          </p>
+          <ul>
+            {placements.map((item) => (
+              <li key={item.id}>
+                {scene.models.find((model) => model.id === item.modelId)
+                  ?.name ?? item.id}
+              </li>
+            ))}
+          </ul>
+          <button
+            className="danger-button"
+            data-testid="delete-selection"
+            onClick={() => {
+              if (onDeleteSelection) onDeleteSelection();
+              else {
+                edit((draft) =>
+                  Object.assign(draft, removeSelection(draft, selectedIds)),
+                );
+                onSelect(null);
+              }
+            }}
+          >
+            <Trash2 size={14} />
+            Supprimer les {selectedIds.length} éléments
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="properties-content">
       <div className="inspector-title">

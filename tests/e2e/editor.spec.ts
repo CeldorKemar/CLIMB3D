@@ -29,7 +29,8 @@ test('vrais placements WebGL, rotation locale, annuler/rétablir et sauvegarde a
     // The front camera faces a real wall at the canvas centre. These clicks go through WebGL picking.
     await canvas.click({ position: { x: bounds!.width / 2, y: bounds!.height / 2 } });
     await expect(page.getByTestId('placement-count')).toHaveText(/1/);
-    await canvas.click({ position: { x: bounds!.width / 2 - 65, y: bounds!.height / 2 + 65 } });
+    const metre = bounds!.height / (24 * Math.tan(21 * Math.PI / 180));
+    await canvas.click({ position: { x: bounds!.width / 2 - metre, y: bounds!.height / 2 + metre } });
     await expect(page.getByTestId('placement-count')).toHaveText(/2/);
     await page.keyboard.press('Escape');
     await page.getByTestId('selected-rotation').fill('35');
