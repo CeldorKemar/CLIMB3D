@@ -1,6 +1,8 @@
 # Climbed — Proposition de modèle de données
 
-Statut : proposition de phase 1 à valider avant implémentation. Ce document ne crée ni base, ni migration, ni code applicatif. Les noms de tables sont indicatifs.
+Ce document conserve le modèle cible de phase 1 accepté comme direction du POC. Les noms d'entités restent conceptuels ; le schéma réel du premier lot est dans apps/api/migrations, et ses limites sont décrites dans [progress.md](progress.md). Il utilise des scènes JSONB versionnées et du SQL via pg, pas encore toutes les tables normalisées proposées ici ni Prisma.
+
+Les interventions du POC sont limitées à une sélection de pans. Un conflit de périmètre empêche deux changements ouverts sur le même pan, tandis que les pans distincts peuvent être préparés en parallèle. Les transactions de stock restent brièvement sérialisées par salle ; aucun verrou humain global de salle n'est imposé.
 
 ## Décisions de cadrage retenues
 

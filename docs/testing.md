@@ -1,6 +1,6 @@
 # Stratégie de validation du POC Climbed
 
-Statut : proposition d’architecture pour le développement futur. Aucun code applicatif ni test applicatif n’a été exécuté pour produire ce document. Les critères ci-dessous restent à implémenter et à mesurer ; ils ne constituent pas des résultats obtenus.
+Ce document décrit la stratégie cible et ses critères. Certains scénarios sont maintenant implémentés dans le POC ; les résultats réellement obtenus figurent dans [progress.md](progress.md). Une ligne de cette matrice ne signifie pas à elle seule que le scénario correspondant a été exécuté ou que toute la fonctionnalité V1 existe.
 
 ## Ce qui doit être démontré
 
@@ -109,3 +109,30 @@ Le stock logiciel dépend des confirmations terrain. Il ne détecte pas automati
 4. Mesurer la scène POC sur le laptop retenu et réaliser la recette avec un ouvreur ; consigner les limites avant extension du pilote.
 
 Chaque rapport futur indiquera commit, configuration, données utilisées, commandes, résultats et limites. Les captures et mesures seront datées. Une suite écrite mais non exécutée restera signalée comme telle.
+
+## Exécuter les contrôles du POC
+
+Depuis la racine, avec Node 24 et Docker fonctionnel :
+
+```sh
+npm ci
+npm run setup:local
+npm test
+npm run build
+npm start
+```
+
+Dans un second terminal, pour tester l'interface compilée servie par l'API :
+
+```sh
+# Linux/macOS ; sous PowerShell, affecter WEB_BASE_URL via $env:WEB_BASE_URL.
+WEB_BASE_URL=http://localhost:3001 npm run test:e2e
+```
+
+En développement Vite (`npm run dev`), le port web de référence des tests est 5173 par défaut. Ne pas modifier les sources pendant une campagne : le redémarrage automatique de l'API peut interrompre une opération réelle.
+
+Les 15 tests d'intégration PostgreSQL réinitialisent uniquement la base dédiée indiquée par `TEST_DATABASE_URL`, dont le nom doit finir par `_test` et être distinct du nom de base de développement. Ne jamais y fournir une base contenant des données à conserver. En l'absence de cette configuration, ces tests sont explicitement skipped ; ce résultat ne valide pas le stock. `setup:local` crée `climbed_test` et le fichier de configuration local nécessaire.
+
+Les tests Playwright utilisent les comptes fictifs, restaurent les scènes et compensent uniquement les réservations créées par leur scénario. Une interruption de processus pendant la campagne peut laisser une réservation à résoudre explicitement ; elle n'autorise pas une réinitialisation globale.
+
+Chromium système est utilisé s'il existe à `/usr/bin/chromium`. Sinon, installer le navigateur correspondant avec `npx playwright install chromium`, ou renseigner `CHROMIUM_PATH`. Les rapports sont dans `playwright-report/` et les traces/captures dans `test-results/`, tous ignorés par Git. Le POC est vérifié sous Chromium ; Firefox, Safari et Windows restent à tester.

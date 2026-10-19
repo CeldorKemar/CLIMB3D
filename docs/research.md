@@ -51,3 +51,5 @@ La photo fournie montre un ensemble de pans, de nombreux volumes et prises. Elle
 - Vérifications documentaires et Git consignées dans [l’avancement](progress.md).
 
 Aucun build, test géométrique, test backend, test navigateur ni benchmark applicatif n’a encore été exécuté.
+
+Cette dernière phrase décrit l'état à la fin de la phase documentaire. Le POC a ensuite été implémenté et ses résultats réels sont consignés dans [progress.md](progress.md). Docker, PostgreSQL et Chromium ont été utilisés ; les contrôles ne sont plus limités à la présence des outils.

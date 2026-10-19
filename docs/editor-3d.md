@@ -1,6 +1,6 @@
 # Architecture proposée de l’éditeur 3D Climbed
 
-Statut : proposition à valider avant implémentation. Ce document décrit des contrats et des choix d’architecture ; aucune fonction applicative n’est implémentée à ce stade.
+Ce document décrit l'architecture cible acceptée pour le POC et ses évolutions. Le premier lot en implémente un sous-ensemble : voir [progress.md](progress.md) pour les fonctions réellement présentes, les tests et les limites. La présence d'un contrat V2 ne signifie pas que son importeur est déjà développé.
 
 ## Objectif et périmètre
 

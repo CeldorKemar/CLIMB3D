@@ -2,7 +2,7 @@
 
 ## Statut et priorité
 
-Le porteur du projet a validé la phase 0 et autorisé la phase d’architecture. Toute implémentation attend la validation de cette architecture.
+Le porteur du projet a validé la phase 0, puis autorisé le POC après présentation de l'architecture. Le développement s'effectue par petits lots démontrables avec des points de retour Git. Les phases importantes suivantes restent soumises à validation.
 
 La valeur centrale est un **éditeur 3D solide et simple sur laptop**, destiné en premier lieu à l’escalade de bloc. Les écrans d’administration accompagnent ce parcours. Le développement initial ne doit pas se transformer en portail de gestion déconnecté de la conception 3D.
 

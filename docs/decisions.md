@@ -53,10 +53,22 @@ La transaction protège la disponibilité informatique. Elle ne prouve pas qu’
 
 ## Points encore ouverts
 
-- Acceptation de l’architecture proposée avant implémentation.
+- Direction d'architecture et POC autorisés ; détails opérationnels avant exposition externe encore à traiter.
 - Références fabricants : accès documentaire bloqué, aucune cote normative vérifiée.
 - Laptop et navigateur de référence, puis budgets mesurés.
 - Hébergement, domaine, email et engagements de sauvegarde avant pilote externe.
 - Permissions sensibles et périmètre d’une opération d’installation simultanée avant développement du stock.
 
 Ces points ne justifient pas d’inventer des valeurs ou des intégrations. Les points d’exploitation sont traités avant qu’ils deviennent des prérequis du pilote.
+
+## Réalisation du POC — adaptations techniques
+
+- **POC autorisé** après présentation de l'architecture. Le porteur du projet demande une pile commune, un hébergement simple chez un fournisseur reconnu, des couches indépendantes et des retours possibles.
+- **Un service web/API et PostgreSQL géré** constituent la cible de déploiement simple. Le fournisseur et les dépenses restent non décidés. Le POC ne déploie rien à l'extérieur.
+- **SQL PostgreSQL et `pg` derrière un port** pour le premier lot, au lieu de Prisma. Les contraintes de stock et transactions restent explicites et testables. Une adoption d'ORM sera évaluée sur les besoins réels et ne changera pas les contrats du navigateur.
+- **scrypt natif Node** pour le hachage des comptes locaux. Cette fonction reste encapsulée ; un changement d'algorithme nécessiterait compatibilité de vérification et rehash progressif, pas une réinitialisation arbitraire de tous les comptes.
+- **CSS et commandes React légères** au POC ; aucune dépendance Zustand/TanStack Query/Tailwind ajoutée sans usage. L'historique réutilisable est dans editor-core.
+- **Réservations par pans**, avec sérialisation des seules transactions courtes de stock dans une salle. Deux ouvreurs peuvent préparer des pans distincts, sous réserve de disponibilité des pièces. Un verrou humain global de toute la salle contredirait le parcours attendu et n'est pas retenu.
+- **Paiement indépendant de l'éditeur** : Stripe Checkout/Customer Portal restent candidats futurs derrière un adaptateur. Aucune clé ni intégration réelle maintenant.
+
+Les contraintes et le coût d'un remplacement de module sont décrits dans [hosting.md](hosting.md). Un retour de code ne restaure pas automatiquement la base ni le matériel réel.

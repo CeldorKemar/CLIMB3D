@@ -1,8 +1,10 @@
-# Architecture proposée — phase 1
+# Architecture — phase 1 et réalisation du POC
 
 ## Statut
 
-Ce document est une proposition à faire valider avant implémentation. Le cadrage métier est validé ; la technologie, l’isolation physique et les détails d’exploitation ci-dessous ne le sont pas encore. Aucun logiciel décrit ici n’est déjà développé.
+La direction de cette architecture est acceptée pour réaliser le POC. La dernière consigne du porteur du projet impose simplicité d'hébergement, technologies courantes et couches remplaçables. Le choix d'un fournisseur d'hébergement et l'intégration du paiement restent futurs. Les propositions ci-dessous décrivent aussi la cible V1 ; l'état réellement implémenté est distingué dans [l'avancement](progress.md).
+
+Adaptations techniques du premier lot : requêtes PostgreSQL via `pg` derrière le port `ClimbedRepository`, migrations SQL versionnées et vérifiées par empreinte, plutôt que Prisma ; hachage scrypt natif Node pour les comptes locaux plutôt qu'Argon2id ; styles CSS propres sans framework de styles ; commandes locales dans editor-core et absence de bibliothèque de requêtes supplémentaire tant que le besoin ne le justifie pas. Ces choix réduisent les dépendances initiales sans modifier le contrat REST ni le modèle métier. Les règles pures du domaine restent distinctes des composants React et du SQL.
 
 ## Choix directeur : monolithe modulaire
 

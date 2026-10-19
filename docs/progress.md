@@ -8,7 +8,7 @@ Le périmètre a été recentré sur la conception 3D de blocs, les organisation
 
 ## Phase 1 — architecture
 
-**État : documentée, validation utilisateur attendue avant implémentation.**
+**État : direction acceptée pour réaliser le POC.** Le porteur du projet demande une pile courante, un hébergement simple et des couches remplaçables. Le paiement reste futur.
 
 Travail réalisé :
 
@@ -21,7 +21,7 @@ Travail réalisé :
 
 Contributions indépendantes : un agent architecture/données, un agent éditeur 3D et un agent QA ont produit leurs documents respectifs. L’agent principal a intégré et relu la proposition. Aucune de ces contributions ne constitue une implémentation ou une validation applicative.
 
-## Vérifications
+## Vérifications de la phase documentaire
 
 Les contrôles ci-dessous portent sur la documentation et les métadonnées techniques. Aucun test applicatif n’existe encore.
 
@@ -32,7 +32,7 @@ Les contrôles ci-dessous portent sur la documentation et les métadonnées tech
 - Relecture d'intégration : précisions sur les permissions client déjà validées, les assets futurs, les variantes physiques et l'ordre de traitement des retries idempotents.
 - Les documents seuls seront conservés dans le premier commit local. Aucun push distant ni publication de l'environnement n'est effectué par cette phase.
 
-## Limites et risques ouverts
+## Limites identifiées lors de l'architecture
 
 - Accès aux documents fabricants toujours bloqué au proxy ; aucune cote ou compatibilité certifiée.
 - Compatibilité de la pile fondée sur métadonnées npm, sans installation ni build intégré.
@@ -41,6 +41,50 @@ Les contrôles ci-dessous portent sur la documentation et les métadonnées tech
 - Windows 11 et laptop de référence non testés.
 - Hébergeur, email et exigences opérationnelles à préciser avant un pilote externe.
 
-## Suite
+## Suite prévue après l'architecture
 
 Après validation de l’architecture : créer le socle exécutable et un premier parcours 3D sauvegardé, puis l’élargir par petits lots validés. Les bibliothèques, accès et stocks doivent être testés avec plusieurs clients et salles avant un usage partagé. Les fonctions reportées ne sont pas autorisées par la seule présence de contrats d’extension dans cette architecture.
+
+## Phase 2 — POC exécutable
+
+**État : implémenté ; vérification finale et démonstration en cours.**
+
+### Réalisation
+
+- Workspace npm TypeScript, contrats validés par Zod, géométrie indépendante et historique d'édition réutilisable.
+- Interface React en français, éditeur WebGL réel et modèles paramétriques distincts, dont coupelles concaves.
+- Pans rectangulaires réglables en dimensions, position, inclinaison et orientation ; toit ; ouvertures rectangulaires réellement traversantes.
+- Placement répété par clic, rotation et réglage de position ; prises attachées aux volumes ; déplacement d'un support entraînant ses enfants.
+- Composition simple de blocs, départs et arrivée ; sauvegarde explicite, rechargement et protection contre les révisions concurrentes.
+- Authentification par session opaque, CSRF et permissions par salle ; comptes fictifs locaux de plusieurs rôles et clients.
+- API NestJS et PostgreSQL, migrations immuables vérifiées par empreinte, SQL paramétré derrière un port, règles de planification pures distinctes du SQL.
+- Stock par exemplaire ; check-in limité aux pans choisis ; interventions parallèles sur pans distincts ; conflits de dernière pièce gérés atomiquement.
+- Retrait en réserve, installation, annulation et retours confirmés ; modifications par différence et journal des opérations.
+- Script de préparation locale non destructif et idempotent ; cible d'un seul conteneur web/API et PostgreSQL externe.
+
+### Vérifications réellement exécutées
+
+- `npm ci --no-audit --no-fund` : installation depuis le lockfile réussie.
+- `npm run setup:local` : PostgreSQL sain, migrations et seed idempotent réussis ; salles existantes préservées.
+- `npm run build` : tous les typechecks de workspaces et build web réussis.
+- `npm test` : **41 tests réussis**, aucun échec ni skip sur l'instance préparée : 16 géométrie, 4 commandes/historique, 6 planification pure et 15 intégrations sur PostgreSQL réel dans une base dédiée.
+- `GET /api/v1/health` : réponse 200 après requête SQL réelle ; `GET /` : interface compilée servie par le processus API sans Vite.
+- Campagne Playwright finale sur la version compilée et vérification du conteneur : résultats à ajouter après achèvement.
+
+Des essais intermédiaires ont révélé et permis de corriger : un décalage visuel introduit dans les ancres persistées ; la confusion entre révision du brouillon et version renvoyée par une opération de stock ; des fixtures de tests devenues invalides après enrichissement de la scène de démo. Une campagne a aussi été interrompue par les rechargements automatiques de développement : la finale utilise la version compilée sans watch.
+
+### Limites du premier lot
+
+- Un document de conception courant par salle ; pas de liste de projets alternatifs ni d'interface de restauration historique pour le moment. Les versions de sauvegarde sont conservées en base.
+- Pans rectangulaires ; édition libre des sommets, polygones et raccords contraints reportés aux lots suivants.
+- Modèles paramétriques du document et presets de démo ; pas encore de CRUD central du catalogue partagé entre salles. Un modèle personnalisé n'est pas automatiquement un exemplaire physique disponible.
+- Authentification et autorisations présentes, mais pas d'écrans complets superadmin, invitations ou gestion des équipes et correction d'inventaire. Approvisionnement initial par les fixtures locales.
+- Le retour confirme ensemble démontage et retour physique. Lors d'une modification installée, le démontage des anciens éléments est confirmé avec l'installation des nouveaux ; les anciens restent indisponibles jusqu'à leur retour confirmé.
+- Pas d'autosauvegarde, d'édition collaborative en temps réel, de scan/import, de paiement ni d'interface publique.
+- Détection des ancres et des références invalides ; aucune validation mécanique, ni détection exhaustive des collisions et empreintes d'appui.
+- Pas de mesure sur un vrai laptop, pas de validation Windows 11. Les tests navigateur avec rendu logiciel ne prouvent pas les performances GPU de la machine cible.
+- Les notices fabricants restent inaccessibles au proxy ; les profils de fixation sont génériques. Aucun fournisseur d'hébergement, email ni paiement n'est connecté.
+
+### Prochaine validation
+
+Faire essayer les gestes de conception et le parcours de réservation au porteur du projet avant une nouvelle phase importante. Les priorités de la suite seront décidées à partir de cette recette, notamment l'ergonomie 3D, les formes de pans et le catalogue client. Le POC local ne doit pas être présenté comme un SaaS prêt à commercialiser.
