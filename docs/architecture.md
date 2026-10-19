@@ -8,6 +8,18 @@ Adaptations techniques du premier lot : requêtes PostgreSQL via `pg` derrière 
 
 ## Choix directeur : monolithe modulaire
 
+### Compléments du lot de recette
+
+Le lot demandé après essai conserve les mêmes couches et les mêmes dépendances. Le noyau `geometry` porte les contacts entre solides, les empreintes d’appui et le raccord des pans ; `editor-core` applique les validations avant modification locale. L’API réexécute ces règles sous le verrou de salle avant sauvegarde ou restauration. Le rendu ne décide pas de la validité des documents persistés.
+
+La détection filtre les paires par boîtes englobantes puis compare les triangles réels avec des arbres spatiaux et un contrôle de contenance. Elle inclut les formes concaves et les pièces sur des pans différents. Le contact direct enfant/support est exempté ; les murs peuvent se raccorder sans être traités comme des pièces concurrentes. La tolérance numérique de contact est de 0,1 mm, pas une marge de montage préconisée par un fabricant.
+
+Les scènes anciennes s’ouvrent sans réécriture. Une sauvegarde de correction peut conserver un conflit ancien uniquement lorsque la géométrie et les poses concernées restent identiques ; elle ne peut ni introduire un nouveau conflit ni déplacer une pièce en conservant son intersection. Une restauration exige un résultat entier sans collision ni empreinte invalide.
+
+Le catalogue paramétrique dispose d’un écran séparé mais réutilise le document de salle et son historique local. Le changement d’écran conserve l’état de l’éditeur. Le catalogue central partagé à l’échelle de l’organisation reste une cible ultérieure. Les modèles placés ou déjà inventoriés sont verrouillés ; une variante reçoit un nouvel identifiant. La déclaration d’exemplaires est une commande serveur explicite, autorisée aux responsables.
+
+Chaque sauvegarde conserve un état complet immuable. Des états nommés peuvent viser une voie. La fusion de voie est une règle de domaine pure : elle conserve les autres voies et leurs supports, et refuse une ressource partagée incompatible. La transaction contrôle géométrie, stock compatible et révision avant de créer une nouvelle version. Elle ne modifie aucune réservation ni confirmation de matériel.
+
 Une application web, une API métier modulaire et une base PostgreSQL. Ce découpage facilite les transactions entre installation et stock, les tests et la maintenance d’un premier produit. Des microservices introduiraient des déploiements et transactions distribuées sans besoin établi pour le POC.
 
 ```mermaid

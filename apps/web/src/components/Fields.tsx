@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 export function NumberField({
   label,
   value,
@@ -19,8 +19,14 @@ export function NumberField({
   max?: number;
 }) {
   const [text, setText] = useState(String(Math.round(value * 1000) / 1000));
-  useEffect(() => setText(String(Math.round(value * 1000) / 1000)), [value]);
+  const textModified = useRef(false);
+  useEffect(() => {
+    setText(String(Math.round(value * 1000) / 1000));
+    textModified.current = false;
+  }, [value]);
   function commit() {
+    if (!textModified.current) return;
+    textModified.current = false;
     const n = Number(text.replace(",", "."));
     if (
       !text.trim() ||
@@ -29,7 +35,12 @@ export function NumberField({
       (max !== undefined && n > max)
     )
       setText(String(Math.round(value * 1000) / 1000));
-    else if (n !== value) onChange(n);
+    else if (n !== value) {
+      onChange(n);
+      // A rejected geometric edit keeps the original prop; accepted changes
+      // refresh this text through the value effect above.
+      setText(String(Math.round(value * 1000) / 1000));
+    }
   }
   return (
     <label className="number-field">
@@ -43,7 +54,10 @@ export function NumberField({
           max={max}
           step={step}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            textModified.current = true;
+            setText(e.target.value);
+          }}
           onBlur={commit}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.currentTarget.blur();

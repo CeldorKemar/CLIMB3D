@@ -1,38 +1,36 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
-  Box,
+  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
   CircleHelp,
-  Compass,
-  Eye,
   Grid2X2,
   Hand,
+  History,
   Layers,
-  LogOut,
   Maximize2,
   MousePointer2,
   Move3D,
-  PanelRightClose,
   Redo2,
-  RotateCcw,
   Save,
   Undo2,
   Warehouse,
   X,
-  Info,
 } from "lucide-react";
 import type {
   BootstrapResponse,
-  ModelDefinition,
   ReservationAction,
   RoomState,
+  WallDefinition,
 } from "@climbed/contracts";
-import { quaternionFromWallAngles } from "@climbed/geometry";
+import {
+  findSceneCollisions,
+  quaternionFromWallAngles,
+} from "@climbed/geometry";
 import { api } from "../api/client";
 import { useEditor } from "../hooks/useEditor";
+import { remainingStock } from "../domain/stock";
 import {
   SceneCanvas,
   type SurfacePoint,
@@ -42,6 +40,9 @@ import { Brand } from "./Brand";
 import { LibraryPanel } from "./LibraryPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { StockPanel } from "./StockPanel";
+import { CatalogEditor } from "./CatalogEditor";
+import { MultiWallBuilder } from "./MultiWallBuilder";
+import { HistoryPanel } from "./HistoryPanel";
 interface Props {
   session: BootstrapResponse;
   roomId: string;
@@ -65,7 +66,10 @@ export function Workspace({
   });
   const [selected, setSelected] = useState<string | null>(null);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
-  const [rightTab, setRightTab] = useState<"design" | "stock">("design");
+  const [editorView, setEditorView] = useState<"room" | "catalog">("room");
+  const [rightTab, setRightTab] = useState<"design" | "stock" | "history">(
+    "design",
+  );
   const [grid, setGrid] = useState(true);
   const [view, setView] = useState<{ mode: ViewMode; seq: number }>({
     mode: "perspective",
@@ -74,21 +78,36 @@ export function Workspace({
   const [activeBoulderId, setActiveBoulderId] = useState<string | null>(
     initial.scene.boulders[0]?.id ?? null,
   );
-  const [focusBoulder, setFocusBoulder] = useState(false);
+  const [hiddenRouteIds, setHiddenRouteIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pendingRoom, setPendingRoom] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
+  const [chainOpen, setChainOpen] = useState(false);
   const dirty = JSON.stringify(scene) !== JSON.stringify(base.scene);
   const activeModel = scene.models.find((m) => m.id === activeModelId);
   const currentRoom = session.rooms.find((r) => r.id === roomId);
+  const remaining = useMemo(() => remainingStock(scene, room), [scene, room]);
+  const totals = useMemo(
+    () => new Map(room.inventory.map((item) => [item.modelId, item.total])),
+    [room.inventory],
+  );
+  const collisions = useMemo(() => findSceneCollisions(scene), [scene]);
   function select(id: string | null) {
     setActiveModelId(null);
     setSelected(id);
   }
+  function openCatalog() {
+    setActiveModelId(null);
+    setEditorView("catalog");
+  }
   function changeView(mode: ViewMode) {
     setView((old) => ({ mode, seq: old.seq + 1 }));
+  }
+  function navigate(tab: "design" | "stock" | "history") {
+    setEditorView("room");
+    setRightTab(tab);
   }
   useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
@@ -113,9 +132,9 @@ export function Workspace({
   }, [editor.undo, editor.redo, busy]);
   useEffect(() => {
     if (!dirty) return;
-    const onUnload = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
+    const unload = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", unload);
+    return () => window.removeEventListener("beforeunload", unload);
   }, [dirty]);
   useEffect(() => {
     if (!notice) return;
@@ -135,10 +154,15 @@ export function Workspace({
       if (replaceScene) {
         editor.reset(result.scene);
         setBase({ scene: result.scene, revision: result.revision });
+        if (
+          !result.scene.placements.some((p) => p.id === selected) &&
+          !result.scene.walls.some((w) => w.id === selected)
+        )
+          setSelected(null);
       }
       if (!replaceScene && result.revision !== base.revision) {
         setError(
-          "Un autre ouvreur a sauvegardé une nouvelle version du projet. Votre brouillon est conservé. Rechargez la page pour récupérer la dernière version ; vos modifications locales ne seront pas conservées.",
+          "Un autre ouvreur a sauvegardé une nouvelle version. Votre brouillon est conservé ; rechargez la page pour récupérer la dernière version, après avoir conservé vos modifications.",
         );
         setNotice("");
       } else setNotice(message);
@@ -167,40 +191,112 @@ export function Workspace({
       "État du matériel mis à jour.",
     );
   }
+  async function declareStock(modelId: string, total: number) {
+    setBusy(true);
+    try {
+      const result = await api.declareStock(
+        roomId,
+        modelId,
+        total,
+        base.revision,
+        session.csrfToken,
+      );
+      setRoom(result);
+      setNotice("Inventaire mis à jour.");
+    } finally {
+      setBusy(false);
+    }
+  }
   function place(point: SurfacePoint) {
     if (!activeModel || busy) return;
+    if ((remaining.get(activeModel.id) ?? 0) <= 0) {
+      setError(
+        "Tous les exemplaires de ce modèle sont utilisés ou prévus dans le projet. Déclarez du stock supplémentaire ou retirez un autre placement.",
+      );
+      return;
+    }
     const id = crypto.randomUUID();
-    edit((d) => {
+    const accepted = edit((d) => {
       d.placements.push({
         id,
         modelId: activeModel.id,
         modelVersion: 1,
         ...point,
       });
-      const b = d.boulders.find((b) => b.id === activeBoulderId);
-      if (b && activeModel.kind === "hold") b.placementIds.push(id);
+      const route = d.boulders.find((b) => b.id === activeBoulderId);
+      if (route) route.placementIds.push(id);
     });
-    setSelected(id);
+    if (accepted) setSelected(id);
+  }
+  function duplicatePlacement(id: string) {
+    const source = scene.placements.find((p) => p.id === id);
+    if (!source) return;
+    const copies = [
+      source,
+      ...scene.placements.filter(
+        (p) => p.parentType === "volume" && p.parentId === id,
+      ),
+    ];
+    const counts = new Map<string, number>();
+    for (const p of copies)
+      counts.set(p.modelId, (counts.get(p.modelId) ?? 0) + 1);
+    for (const [modelId, count] of counts)
+      if ((remaining.get(modelId) ?? 0) < count) {
+        setError(
+          `Stock insuffisant pour dupliquer : ${scene.models.find((m) => m.id === modelId)?.name ?? modelId}.`,
+        );
+        return;
+      }
+    const ids = new Map(copies.map((p) => [p.id, crypto.randomUUID()]));
+    const model = scene.models.find((m) => m.id === source.modelId)!;
+    const accepted = edit((d) => {
+      for (const p of copies) {
+        const copy = structuredClone(p);
+        copy.id = ids.get(p.id)!;
+        if (p.id === id) copy.position[0] += model.dimensions[0] + 0.08;
+        else copy.parentId = ids.get(p.parentId)!;
+        d.placements.push(copy);
+      }
+      for (const route of d.boulders) {
+        for (const original of copies)
+          if (route.placementIds.includes(original.id))
+            route.placementIds.push(ids.get(original.id)!);
+      }
+    });
+    if (accepted) setSelected(ids.get(id)!);
   }
   function addWall() {
     const id = crypto.randomUUID();
     const last = scene.walls.at(-1)!;
-    edit((d) =>
-      d.walls.push({
-        id,
-        name: `Pan ${d.walls.length + 1}`,
-        width: 3,
-        height: 3.5,
-        thickness: 0.18,
-        position: [last.position[0] + last.width / 2 + 1.5, 0, 0],
-        rotation: quaternionFromWallAngles(0),
-        color: "#b8c4ad",
-        openings: [],
-        fixingSpacing: 0.25,
-      }),
-    );
-    select(id);
-    setRightTab("design");
+    if (
+      edit((d) =>
+        d.walls.push({
+          id,
+          name: `Pan ${d.walls.length + 1}`,
+          width: 3,
+          height: 3.5,
+          thickness: 0.18,
+          position: [last.position[0] + last.width / 2 + 1.5, 0, 0],
+          rotation: quaternionFromWallAngles(0),
+          color: "#b8c4ad",
+          openings: [],
+          fixingSpacing: 0.25,
+        }),
+      )
+    ) {
+      select(id);
+      setRightTab("design");
+      changeView("perspective");
+    }
+  }
+  function addChain(walls: WallDefinition[]): boolean {
+    const ok = edit((d) => d.walls.push(...walls));
+    if (ok) {
+      select(walls[0]!.id);
+      setRightTab("design");
+      changeView("perspective");
+    }
+    return ok;
   }
   function requestRoom(id: string) {
     if (id === roomId) return;
@@ -298,20 +394,46 @@ export function Workspace({
       <div inert={busy} className={`atelier-body ${busy ? "is-busy" : ""}`}>
         <nav className="nav-rail" aria-label="Navigation de l’atelier">
           <button
-            className={rightTab === "design" ? "active" : ""}
+            data-testid="nav-design"
+            className={
+              editorView === "room" && rightTab === "design" ? "active" : ""
+            }
             title="Conception"
             aria-label="Conception"
-            onClick={() => setRightTab("design")}
+            onClick={() => navigate("design")}
           >
             <Layers size={22} />
           </button>
           <button
-            className={rightTab === "stock" ? "active" : ""}
+            data-testid="nav-catalog"
+            className={editorView === "catalog" ? "active" : ""}
+            title="Éditeur de modèles"
+            aria-label="Éditeur de modèles"
+            onClick={openCatalog}
+          >
+            <BookOpen size={22} />
+          </button>
+          <button
+            data-testid="nav-stock"
+            className={
+              editorView === "room" && rightTab === "stock" ? "active" : ""
+            }
             title="Stock et interventions"
             aria-label="Stock et interventions"
-            onClick={() => setRightTab("stock")}
+            onClick={() => navigate("stock")}
           >
             <Warehouse size={22} />
+          </button>
+          <button
+            data-testid="nav-history"
+            className={
+              editorView === "room" && rightTab === "history" ? "active" : ""
+            }
+            title="Historique des conceptions"
+            aria-label="Historique des conceptions"
+            onClick={() => navigate("history")}
+          >
+            <History size={22} />
           </button>
           <div className="rail-spacer" />
           <button
@@ -322,210 +444,270 @@ export function Workspace({
             <CircleHelp size={20} />
           </button>
         </nav>
-        <LibraryPanel
-          scene={scene}
-          selected={selected}
-          activeModel={activeModel}
-          onSelect={(id) => {
-            select(id);
-            setRightTab("design");
-          }}
-          onModel={(m) => {
-            setActiveModelId(m?.id ?? null);
-            setSelected(null);
-          }}
-          onAddWall={addWall}
-        />
-        <section className="viewport-area">
-          <div className="viewport-heading">
-            <div>
-              <div className="breadcrumb">
-                <span>{currentRoom?.name}</span>
-                <ChevronRight size={12} />
-                <span>Conception</span>
-              </div>
-              <h1>
-                {scene.name}
-                <span className="theory-badge">THÉORIQUE</span>
-              </h1>
-            </div>
-            <button
-              className="quiet-button"
-              onClick={() => {
-                setRightTab(rightTab === "stock" ? "design" : "stock");
-              }}
-            >
-              <Warehouse size={15} />
-              Stock de la salle
-            </button>
-          </div>
-          <div className="canvas-wrap">
-            <SceneCanvas
+        {editorView === "catalog" ? (
+          <CatalogEditor
+            scene={scene}
+            room={room}
+            edit={edit}
+            onBack={() => setEditorView("room")}
+            dirty={dirty}
+            busy={busy}
+            canManageStock={["superadmin", "admin", "manager"].includes(
+              session.user.role,
+            )}
+            declareStock={declareStock}
+          />
+        ) : (
+          <>
+            <LibraryPanel
               scene={scene}
               selected={selected}
               activeModel={activeModel}
-              grid={grid}
-              view={view}
-              onSelect={select}
-              onPlace={place}
-              activeBoulderId={activeBoulderId}
-              focusBoulder={focusBoulder}
+              onSelect={(id) => {
+                select(id);
+                setRightTab("design");
+              }}
+              onModel={(m) => {
+                setActiveModelId(m?.id ?? null);
+                setSelected(null);
+              }}
+              onAddWall={addWall}
+              onAddChain={() => setChainOpen(true)}
+              onCatalog={openCatalog}
+              remaining={remaining}
+              totals={totals}
             />
-            <div className="viewport-tools">
-              <button
-                className={!activeModel ? "active" : ""}
-                aria-label="Outil de sélection"
-                title="Sélection (Échap)"
-                onClick={() => setActiveModelId(null)}
-              >
-                <MousePointer2 size={18} />
-              </button>
-              <span />
-              <button
-                className={grid ? "active subtle" : ""}
-                title="Afficher les fixations et la grille"
-                aria-label="Afficher les fixations et la grille"
-                aria-pressed={grid}
-                onClick={() => setGrid((v) => !v)}
-              >
-                <Grid2X2 size={18} />
-              </button>
-              <button
-                title="Recentrer la vue"
-                aria-label="Recentrer la vue"
-                onClick={() => changeView("perspective")}
-              >
-                <Maximize2 size={18} />
-              </button>
-            </div>
-            <div className="view-switch">
-              <button
-                data-testid="view-perspective"
-                className={view.mode === "perspective" ? "active" : ""}
-                onClick={() => changeView("perspective")}
-              >
-                Perspective
-              </button>
-              <button
-                data-testid="view-front"
-                className={view.mode === "front" ? "active" : ""}
-                onClick={() => changeView("front")}
-              >
-                Face
-              </button>
-              <button
-                data-testid="view-top"
-                className={view.mode === "top" ? "active" : ""}
-                onClick={() => changeView("top")}
-              >
-                Dessus
-              </button>
-            </div>
-            <div className="scene-label">
-              <span className="status-dot" />
-              ESPACE DE CONCEPTION<span>Unité : mètre</span>
-            </div>
-            <div className="axis-indicator" aria-hidden="true">
-              <i className="axis-y">Y</i>
-              <i className="axis-z">Z</i>
-              <i className="axis-x">X</i>
-              <b />
-            </div>
-            {activeModel && (
-              <div className="placement-hint">
+            <section className="viewport-area">
+              <div className="viewport-heading">
+                <div>
+                  <div className="breadcrumb">
+                    <span>{currentRoom?.name}</span>
+                    <ChevronRight size={12} />
+                    <span>Conception</span>
+                  </div>
+                  <h1>
+                    {scene.name}
+                    <span className="theory-badge">CONCEPTION</span>
+                  </h1>
+                </div>
+                {collisions.length > 0 && (
+                  <button
+                    className="collision-warning"
+                    data-testid="legacy-collisions"
+                    onClick={() => {
+                      select(collisions[0]!.firstId);
+                      setRightTab("design");
+                    }}
+                  >
+                    {collisions.length} intersection
+                    {collisions.length > 1 ? "s" : ""} à corriger
+                  </button>
+                )}
+              </div>
+              <div className="canvas-wrap">
+                <SceneCanvas
+                  scene={scene}
+                  selected={selected}
+                  activeModel={activeModel}
+                  grid={grid}
+                  view={view}
+                  onSelect={select}
+                  onPlace={place}
+                  hiddenRouteIds={hiddenRouteIds}
+                />
+                <div className="viewport-tools">
+                  <button
+                    className={!activeModel ? "active" : ""}
+                    aria-label="Outil de sélection"
+                    title="Sélection (Échap)"
+                    onClick={() => setActiveModelId(null)}
+                  >
+                    <MousePointer2 size={18} />
+                  </button>
+                  <span />
+                  <button
+                    className={grid ? "active subtle" : ""}
+                    title="Afficher les fixations et la grille"
+                    aria-label="Afficher les fixations et la grille"
+                    aria-pressed={grid}
+                    onClick={() => setGrid((v) => !v)}
+                  >
+                    <Grid2X2 size={18} />
+                  </button>
+                  <button
+                    title="Recentrer la vue"
+                    aria-label="Recentrer la vue"
+                    onClick={() => changeView("perspective")}
+                  >
+                    <Maximize2 size={18} />
+                  </button>
+                </div>
+                <div className="view-switch">
+                  <button
+                    data-testid="view-perspective"
+                    className={view.mode === "perspective" ? "active" : ""}
+                    onClick={() => changeView("perspective")}
+                  >
+                    Perspective
+                  </button>
+                  <button
+                    data-testid="view-front"
+                    className={view.mode === "front" ? "active" : ""}
+                    onClick={() => changeView("front")}
+                  >
+                    Face
+                  </button>
+                  <button
+                    data-testid="view-top"
+                    className={view.mode === "top" ? "active" : ""}
+                    onClick={() => changeView("top")}
+                  >
+                    Dessus
+                  </button>
+                </div>
+                <div className="scene-label">
+                  <span className="status-dot" />
+                  ESPACE DE CONCEPTION<span>Unité : mètre</span>
+                </div>
+                <div className="axis-indicator" aria-hidden="true">
+                  <i className="axis-y">Y</i>
+                  <i className="axis-z">Z</i>
+                  <i className="axis-x">X</i>
+                  <b />
+                </div>
+                {activeModel && (
+                  <div className="placement-hint">
+                    <span className="status-dot" />
+                    <strong>{activeModel.name}</strong>
+                    <span>
+                      {Math.max(0, remaining.get(activeModel.id) ?? 0)} restants
+                      · Cliquer pour poser
+                    </span>
+                    <button
+                      aria-label="Quitter le placement"
+                      onClick={() => setActiveModelId(null)}
+                    >
+                      Échap
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <footer className="viewport-footer">
+                <span>
+                  <MousePointer2 size={13} />
+                  Cliquer : sélectionner
+                </span>
+                <span>
+                  <Hand size={13} />
+                  Glisser : orbiter · Clic droit : déplacer · Molette : zoomer
+                </span>
+                <span data-testid="placement-count">
+                  {scene.placements.length} éléments
+                </span>
+              </footer>
+            </section>
+            <aside className="inspector-panel">
+              <div className="inspector-heading">
+                {rightTab === "design" ? (
+                  <>
+                    <Move3D size={15} />
+                    Propriétés
+                  </>
+                ) : rightTab === "stock" ? (
+                  <>
+                    <Warehouse size={15} />
+                    Stock & suivi
+                  </>
+                ) : (
+                  <>
+                    <History size={15} />
+                    Historique des conceptions
+                  </>
+                )}
+              </div>
+              {rightTab === "design" ? (
+                <PropertiesPanel
+                  scene={scene}
+                  selected={selected}
+                  edit={edit}
+                  onSelect={select}
+                  activeBoulderId={activeBoulderId}
+                  setActiveBoulderId={setActiveBoulderId}
+                  hiddenRouteIds={hiddenRouteIds}
+                  setHiddenRouteIds={setHiddenRouteIds}
+                  onDuplicate={duplicatePlacement}
+                  onCatalog={openCatalog}
+                />
+              ) : rightTab === "stock" ? (
+                <StockPanel
+                  room={room}
+                  scene={scene}
+                  dirty={dirty}
+                  busy={busy}
+                  reserve={reserve}
+                  action={reservationAction}
+                />
+              ) : (
+                <HistoryPanel
+                  roomId={roomId}
+                  csrf={session.csrfToken}
+                  revision={base.revision}
+                  scene={scene}
+                  dirty={dirty}
+                  busy={busy}
+                  restore={(id) =>
+                    void run(
+                      () =>
+                        api.restoreSnapshot(
+                          roomId,
+                          id,
+                          base.revision,
+                          session.csrfToken,
+                        ),
+                      "Conception restaurée. Le stock physique reste inchangé.",
+                      true,
+                    )
+                  }
+                />
+              )}
+              <div className="inspector-footer">
                 <span className="status-dot" />
-                <strong>{activeModel.name}</strong>
-                <span>Cliquez pour poser</span>
-                <button
-                  aria-label="Quitter le placement"
-                  onClick={() => setActiveModelId(null)}
-                >
-                  Échap
-                  <X size={12} />
-                </button>
+                Projet v{base.revision}
+                <span>POC · Données serveur</span>
               </div>
-            )}
-            {(error || editor.issue) && (
-              <div className="canvas-message error-banner" role="alert">
-                <span>{error || editor.issue}</span>
-                <button
-                  className="icon-button small"
-                  aria-label="Fermer le message"
-                  onClick={() => {
-                    setError("");
-                    editor.clearIssue();
-                  }}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-            {notice && (
-              <div className="canvas-message success-banner" role="status">
-                <Check size={16} />
-                {notice}
-              </div>
-            )}
-          </div>
-          <footer className="viewport-footer">
-            <span>
-              <MousePointer2 size={13} />
-              Cliquer : sélectionner
-            </span>
-            <span>
-              <Hand size={13} />
-              Glisser : orbiter · Clic droit : déplacer · Molette : zoomer
-            </span>
-            <span data-testid="placement-count">
-              {scene.placements.length} éléments
-            </span>
-          </footer>
-        </section>
-        <aside className="inspector-panel">
-          <div className="inspector-tabs">
-            <button
-              className={rightTab === "design" ? "active" : ""}
-              onClick={() => setRightTab("design")}
-            >
-              <Move3D size={15} />
-              Propriétés
-            </button>
-            <button
-              className={rightTab === "stock" ? "active" : ""}
-              onClick={() => setRightTab("stock")}
-            >
-              <Warehouse size={15} />
-              Stock & suivi
-            </button>
-          </div>
-          {rightTab === "design" ? (
-            <PropertiesPanel
-              scene={scene}
-              selected={selected}
-              edit={edit}
-              onSelect={select}
-              activeBoulderId={activeBoulderId}
-              setActiveBoulderId={setActiveBoulderId}
-              focusBoulder={focusBoulder}
-              setFocusBoulder={setFocusBoulder}
-            />
-          ) : (
-            <StockPanel
-              room={room}
-              scene={scene}
-              dirty={dirty}
-              busy={busy}
-              reserve={reserve}
-              action={reservationAction}
-            />
-          )}
-          <div className="inspector-footer">
-            <span className="status-dot" />
-            Projet v{base.revision}
-            <span>POC · Données serveur</span>
-          </div>
-        </aside>
+            </aside>
+          </>
+        )}
       </div>
+      {(error || editor.issue) && (
+        <div className="global-editor-message error-banner" role="alert">
+          <span>{error || editor.issue}</span>
+          <button
+            className="icon-button small"
+            aria-label="Fermer le message"
+            onClick={() => {
+              setError("");
+              editor.clearIssue();
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      {notice && !error && !editor.issue && (
+        <div className="global-editor-message success-banner" role="status">
+          <Check size={16} />
+          {notice}
+        </div>
+      )}
+      {chainOpen && (
+        <MultiWallBuilder
+          scene={scene}
+          onClose={() => setChainOpen(false)}
+          onApply={addChain}
+        />
+      )}
       {pendingRoom && (
         <div className="modal-backdrop">
           <section
@@ -573,23 +755,23 @@ export function Workspace({
             <h2 id="help-title">Du pan au premier mouvement.</h2>
             <ol>
               <li>
-                <strong>Construisez votre support.</strong> Ajoutez des pans,
-                ajustez leurs dimensions et leur inclinaison dans les
-                propriétés.
+                <strong>Construisez les supports.</strong> Ajoutez un pan ou un
+                mur composé de segments raccordés à angles absolus.
               </li>
               <li>
-                <strong>Donnez du relief.</strong> Choisissez un volume puis
-                cliquez sur un pan. Les prises peuvent se poser sur un pan ou un
-                volume.
+                <strong>Préparez les modèles.</strong> L’éditeur de bibliothèque
+                permet de créer les formes et de déclarer explicitement le
+                stock.
               </li>
               <li>
-                <strong>Composez vos blocs.</strong> Choisissez un bloc actif :
-                les nouvelles prises lui seront associées. Sélectionnez une
-                prise pour indiquer départ ou arrivée.
+                <strong>Composez les voies.</strong> Les nouveaux placements
+                rejoignent la voie active. Un même volume ou une même prise peut
+                appartenir à plusieurs voies.
               </li>
               <li>
-                <strong>Passez au terrain.</strong> Sauvegardez, réservez dans «
-                Stock & suivi », puis confirmez chaque étape physique.
+                <strong>Conservez et installez.</strong> Sauvegardez et gardez
+                une version dans l’historique. Le check-in réserve le matériel,
+                avant son retrait puis son installation.
               </li>
             </ol>
             <p>
@@ -598,8 +780,8 @@ export function Workspace({
               Échap : sélectionner · Ctrl Z : annuler · Ctrl Maj Z : rétablir
             </p>
             <p className="small-muted">
-              Les modèles génériques du POC ne constituent pas une validation de
-              fixation ou de montage. Import de modèles 3D et scan prévus en V2.
+              Les modèles génériques ne constituent pas une validation
+              mécanique. Scan et import de modèles externes prévus en V2.
             </p>
           </section>
         </div>

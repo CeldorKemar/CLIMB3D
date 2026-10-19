@@ -10,19 +10,18 @@ import type { Edit } from "../domain/editor";
 export function useEditor(initial: SceneDocument) {
   const [history, setHistory] = useState(() => createHistory(initial));
   const [issue, setIssue] = useState("");
-  function edit(change: Edit) {
-    setHistory((old) => {
-      try {
-        const next = structuredClone(old.present);
-        change(next);
-        const result = commitScene(old, next);
-        setIssue("");
-        return result;
-      } catch (e) {
-        setIssue((e as Error).message);
-        return old;
-      }
-    });
+  function edit(change: Edit): boolean {
+    try {
+      const next = structuredClone(history.present);
+      change(next);
+      const result = commitScene(history, next);
+      setHistory(result);
+      setIssue("");
+      return true;
+    } catch (e) {
+      setIssue((e as Error).message);
+      return false;
+    }
   }
   return {
     scene: history.present,

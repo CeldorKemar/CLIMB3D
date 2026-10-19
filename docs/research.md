@@ -53,3 +53,52 @@ La photo fournie montre un ensemble de pans, de nombreux volumes et prises. Elle
 Aucun build, test géométrique, test backend, test navigateur ni benchmark applicatif n’a encore été exécuté.
 
 Cette dernière phrase décrit l'état à la fin de la phase documentaire. Le POC a ensuite été implémenté et ses résultats réels sont consignés dans [progress.md](progress.md). Docker, PostgreSQL et Chromium ont été utilisés ; les contrôles ne sont plus limités à la présence des outils.
+
+## Demande 6 — dimensions, perçages, fixations et trames
+
+Vérification réseau effectuée le **19 octobre 2026 à 17:44 UTC**. Les requêtes ont réellement été exécutées avec `urllib.request`, en HTTPS et avec vérification TLS active. Elles n'ont récupéré aucun contenu de fabricant ni de forum. Le message observé est : `Tunnel connection failed: 403 Forbidden`. Ce refus intervient au proxy avant la lecture du site ; il ne permet pas de conclure que la page ou le document existe, manque ou contient une caractéristique particulière.
+
+### Requêtes effectuées
+
+| Cible demandée | Usage recherché | Résultat |
+| --- | --- | --- |
+| <https://www.epclimbing.com/en/> | Fabricant de murs, informations techniques | Proxy 403 ; contenu non consulté |
+| <https://www.cheeta-holds.com/> | Prises, macros et volumes, notices par référence | Proxy 403 ; contenu non consulté |
+| <https://flathold.com/> | Prises/macros, géométries et fixations | Proxy 403 ; contenu non consulté |
+| <https://settercloset.com/> | Catalogue de prises, dont Kilter | Proxy 403 ; contenu non consulté |
+| <https://www.bluepill-climbing.com/> | Volumes et prises, informations de montage | Proxy 403 ; contenu non consulté |
+| <https://www.metoliusclimbing.com/> | Documentation de construction et de fixation | Proxy 403 ; contenu non consulté |
+| <https://www.atomikclimbingholds.com/> | Fiches de prises et matériel de fixation | Proxy 403 ; contenu non consulté |
+| <https://www.walltopia.com/> et <https://walltopia.com/climbing-walls/> | Panneaux, murs, plans techniques et trames | Proxy 403 ; contenu non consulté |
+| <https://www.mountainproject.com/forum/> | Contexte et retours de pratiquants, sans valeur de notice fabricant | Proxy 403 ; contenu non consulté |
+| <https://www.metoliusclimbing.com/pdf/How-to-Build-a-Home-Bouldering-Wall.pdf> | Chemin candidat d'un guide PDF de construction | Proxy 403 ; existence du PDF et contenu non vérifiés |
+| <https://www.ep-holds.com/> et <https://www.entre-prises.com/> | Domaines alternatifs candidats pour documentation fabricant | Proxy 403 ; pertinence actuelle et contenu non vérifiés |
+| <https://www.escapeclimbing.com/> | Autre fabricant candidat pour documentation technique | Proxy 403 ; contenu non consulté |
+| <https://www.reddit.com/r/climbing/> | Autre forum de contexte | Proxy 403 ; contenu non consulté |
+| <https://www.climbingbusinessjournal.com/> | Presse professionnelle, recherche de références | Proxy 403 ; contenu non consulté |
+| <https://www.google.com/search?q=climbing+wall+tnut+hole+diameter+Metolius> | Recherche de documents techniques officiels | Proxy 403 ; aucun résultat reçu |
+
+Une requête témoin vers <https://registry.npmjs.org/three/latest> a reçu **HTTP 200** pendant la même vérification. L'accès HTTPS est donc possible pour cette destination autorisée ; cela n'établit pas l'ouverture des domaines de recherche. Le détail horodaté des dernières requêtes est conservé localement dans `.data/research/demande6-network-checks.json` (fichier ignoré par Git). Aucun relais de contournement, certificat désactivé ni nouvel extrait prétendument lu n'a été utilisé.
+
+### Ce que les preuves ne permettent pas d'affirmer
+
+Aucune fiche fournisseur n'a été lue : il n'existe donc pas encore de dimensions réelles, plan de perçage, entraxe ou système de fixation vérifié par référence dans ce relevé. Les mentions **M10**, **3/8 pouce** et **100/150/200/250 mm** sont des sujets à vérifier, pas des caractéristiques attestées ou des normes universelles. Une source future devra préciser la référence, la version et les unités ; un forum ne remplacera pas la notice du produit.
+
+### Conséquences pour le modèle paramétrique
+
+Ces points constituent une proposition de modélisation, et non des faits fabricant vérifiés :
+
+- Séparer le **diamètre du perçage du panneau**, le **filetage de l'insert**, le **passage du boulon dans la prise** et les **trous pour vis**. Une désignation de filetage ne renseigne pas à elle seule le diamètre de perçage du bois. Conserver une désignation métrique ou impériale explicite et, lorsqu'il est connu, le pas de filetage ; une conversion de longueur ne démontre pas la compatibilité mécanique.
+- Décrire une trame par son origine locale, ses deux espacements, son orientation, un éventuel décalage de rangée et ses points supprimés ou ajoutés. Autoriser une liste de points libre. Toute valeur initiale utilisée pour la démonstration doit rester modifiable et être présentée comme un réglage d'exemple, sans association implicite à une marque.
+- Distinguer la **fixation de l'objet sur son support** et les **points qu'il offre pour recevoir d'autres objets**. Prévoir les états boulonné, vissé, combinaison et inconnu, sans attribuer automatiquement un mode de fixation à toutes les prises ou à tous les volumes.
+- La catégorie visuelle « volume » ou « macro » ne prouve ni la présence d'inserts ni la possibilité de recevoir d'autres prises. Décrire cette capacité, les surfaces admises et les points disponibles séparément, avec un état « non renseigné ». Distinguer également l'absence d'inserts d'une information manquante.
+- Conserver modèle, exemplaire physique et placement séparés. Un placement peut avoir pour support un pan ou une surface d'un autre objet ; cette hiérarchie doit empêcher les cycles et préserver la position relative lors du déplacement du support.
+- Associer aux caractéristiques documentées une provenance : fabricant, référence, URL, date de lecture, identifiant/version du document, extrait et statut de vérification. Les paramètres saisis par le client et les dimensions estimées visuellement ne doivent pas être étiquetés « fabricant vérifié ».
+
+Le modèle V1 reste constitué de formes paramétriques : murs, volumes, prises pleines ou à cavité. Les scans sont reportés. La visualisation et la détection d'intersections ne délivrent aucune validation de montage ou de résistance.
+
+Coordination avec le contrat du POC : `fixing` est optionnel sur les murs et modèles ; il sépare `method`, `holeDiameterMm`, `threadDesignation`, `threadSystem` et une provenance (`status`, `sourceUrl`, `reference`, `checkedAt`). `fixingGrid`, optionnel sur le mur, décrit `pitchX`, `pitchY`, `offsetX`, `offsetY` en **mètres**, et `rotationDegrees` en degrés ; le diamètre reste explicitement en **millimètres**. Ces champs n'attestent aucune marque et ne constituent pas un profil constructeur. Les points libres, décalages de rangées, surfaces autorisées, pas de filetage et capacités détaillées de support ci-dessus restent des besoins à spécifier : leur présence dans cette proposition ne signifie pas qu'ils sont implémentés. Le diamètre doit toujours être interprété avec son contexte d'objet et de trou, sans le confondre avec la désignation du filetage.
+
+### Travail restant après ouverture du réseau
+
+Lire les notices et fiches effectivement accessibles, relever des références précises avec leur document et leur extrait, puis confirmer séparément dimensions, perçages, trames, boulons/vis et inserts optionnels. Les catalogues de murs, de volumes et de prises doivent rester distincts. Pour toute information issue d'un forum, préciser son rôle de retour d'expérience et rechercher une confirmation fabricant avant d'en tirer un profil de produit.

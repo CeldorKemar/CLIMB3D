@@ -1,25 +1,22 @@
-import { useState } from "react";
 import {
-  Box,
+  Copy,
   Crosshair,
-  Flag,
-  Layers,
   Plus,
   Trash2,
   CircleHelp,
-  Mountain,
+  BookOpen,
 } from "lucide-react";
 import { Quaternion, Vector3 } from "three";
-import { getWallAngles, quaternionFromWallAngles } from "@climbed/geometry";
-import type {
-  SceneDocument,
-  Quat,
-  Vec3,
-  ModelDefinition,
-} from "@climbed/contracts";
+import {
+  getWallAngles,
+  quaternionFromWallAngles,
+  wallProjectedDimensions,
+} from "@climbed/geometry";
+import type { SceneDocument, Quat, Vec3 } from "@climbed/contracts";
 import type { Edit } from "../domain/editor";
 import { removePlacement } from "../domain/editor";
 import { NumberField } from "./Fields";
+import { RoutePanel } from "./RoutePanel";
 interface Props {
   scene: SceneDocument;
   selected: string | null;
@@ -27,8 +24,10 @@ interface Props {
   onSelect: (id: string | null) => void;
   activeBoulderId: string | null;
   setActiveBoulderId: (id: string | null) => void;
-  focusBoulder: boolean;
-  setFocusBoulder: (v: boolean) => void;
+  hiddenRouteIds: string[];
+  setHiddenRouteIds: (ids: string[]) => void;
+  onDuplicate: (id: string) => void;
+  onCatalog: () => void;
 }
 export function PropertiesPanel({
   scene,
@@ -37,49 +36,31 @@ export function PropertiesPanel({
   onSelect,
   activeBoulderId,
   setActiveBoulderId,
-  focusBoulder,
-  setFocusBoulder,
+  hiddenRouteIds,
+  setHiddenRouteIds,
+  onDuplicate,
+  onCatalog,
 }: Props) {
   const wall = scene.walls.find((w) => w.id === selected);
   const placement = scene.placements.find((p) => p.id === selected);
   const model = scene.models.find((m) => m.id === placement?.modelId);
-  const activeBoulder = scene.boulders.find((b) => b.id === activeBoulderId);
   function changeWall(patch: object) {
-    edit((d) => {
-      Object.assign(d.walls.find((w) => w.id === selected)!, patch);
-    });
+    edit((d) => Object.assign(d.walls.find((w) => w.id === selected)!, patch));
   }
   function changePlacement(patch: object) {
-    edit((d) => {
-      Object.assign(d.placements.find((p) => p.id === selected)!, patch);
-    });
-  }
-  function changeModel(patch: Partial<ModelDefinition>) {
-    if (!model || !placement) return;
-    edit((d) => {
-      const next = {
-        ...structuredClone(model),
-        ...patch,
-        id: crypto.randomUUID(),
-        name: model.name.includes("personnalisé")
-          ? model.name
-          : `${model.name} · personnalisé`,
-      };
-      d.models.push(next);
-      d.placements.find((p) => p.id === placement.id)!.modelId = next.id;
-    });
+    edit((d) =>
+      Object.assign(d.placements.find((p) => p.id === selected)!, patch),
+    );
   }
   const angles = wall ? getWallAngles(wall.rotation) : undefined;
+  const projection = wall ? wallProjectedDimensions(wall) : undefined;
+  const roof = angles && Math.abs(Math.abs(angles.inclination) - 90) < 0.1;
+  const tilted = angles && Math.abs(angles.inclination) > 0.1;
   const position = wall?.position ?? placement?.position;
   const rotationDeg = placement
     ? (2 * Math.atan2(placement.rotation[2], placement.rotation[3]) * 180) /
       Math.PI
     : 0;
-  function boulderUpdate(patch: object) {
-    edit((d) => {
-      Object.assign(d.boulders.find((b) => b.id === activeBoulderId)!, patch);
-    });
-  }
   return (
     <div className="properties-content">
       <div className="inspector-title">
@@ -165,7 +146,13 @@ export function PropertiesPanel({
                 onChange={(width) => changeWall({ width })}
               />
               <NumberField
-                label="Hauteur"
+                label={
+                  roof
+                    ? "Profondeur sur le toit"
+                    : tilted
+                      ? "Longueur sur le pan"
+                      : "Hauteur"
+                }
                 value={wall.height}
                 min={0.1}
                 max={30}
@@ -174,6 +161,13 @@ export function PropertiesPanel({
                 onChange={(height) => changeWall({ height })}
               />
             </div>
+            <p
+              className="projected-dimensions"
+              data-testid="wall-projected-height"
+            >
+              Hauteur verticale : {projection?.verticalHeight.toFixed(2)} m ·
+              Profondeur : {projection?.horizontalDepth.toFixed(2)} m
+            </p>
             <div className="preset-row">
               {[
                 ["Vertical", 0],
@@ -345,125 +339,53 @@ export function PropertiesPanel({
         </div>
       )}
       {placement && model && (
-        <>
-          <div className="property-section">
-            <h4>Orientation & dimensions</h4>
-            <NumberField
-              label="Rotation"
-              value={rotationDeg}
-              unit="°"
-              step={5}
-              testId="selected-rotation"
-              onChange={(v) => {
-                const q = new Quaternion(...placement.rotation).multiply(
-                  new Quaternion().setFromAxisAngle(
-                    new Vector3(0, 0, 1),
-                    ((v - rotationDeg) * Math.PI) / 180,
-                  ),
-                );
-                changePlacement({ rotation: q.toArray() as Quat });
-              }}
-            />
-            <div className="field-triple">
-              {["Largeur", "Hauteur", "Relief"].map((label, i) => (
-                <NumberField
-                  key={`${model.id}-${i}`}
-                  label={label}
-                  value={model.dimensions[i]!}
-                  unit="m"
-                  step={0.01}
-                  min={0.005}
-                  max={30}
-                  onChange={(v) => {
-                    const dimensions = [...model.dimensions] as Vec3;
-                    dimensions[i] = v;
-                    changeModel({ dimensions });
-                  }}
-                />
-              ))}
-            </div>
-            <label className="color-field">
-              Couleur
-              <input
-                aria-label="Couleur de l’élément"
-                type="color"
-                value={model.color}
-                onChange={(e) => changeModel({ color: e.target.value })}
-              />
-            </label>
-            <p className="field-note">
-              Dimensions et couleur créent un modèle personnalisé, sans stock
-              physique associé.
-            </p>
+        <div className="property-section">
+          <h4>Orientation du placement</h4>
+          <NumberField
+            label="Rotation"
+            value={rotationDeg}
+            unit="°"
+            step={5}
+            testId="selected-rotation"
+            onChange={(v) => {
+              const q = new Quaternion(...placement.rotation).multiply(
+                new Quaternion().setFromAxisAngle(
+                  new Vector3(0, 0, 1),
+                  ((v - rotationDeg) * Math.PI) / 180,
+                ),
+              );
+              changePlacement({ rotation: q.toArray() as Quat });
+            }}
+          />
+          <div className="placement-model-details">
+            <span>Dimensions du modèle</span>
+            <strong>
+              {model.dimensions
+                .map((n) => `${Math.round(n * 1000)} mm`)
+                .join(" × ")}
+            </strong>
+            <span className="placement-model-color">
+              <i style={{ background: model.color }} />
+              {model.color}
+            </span>
           </div>
-          {model.kind === "hold" && activeBoulder && (
-            <div className="property-section">
-              <h4>Cette prise dans le bloc actif</h4>
-              <label className="checkbox-line">
-                <input
-                  type="checkbox"
-                  checked={activeBoulder.placementIds.includes(placement.id)}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    edit((d) => {
-                      const b = d.boulders.find(
-                        (b) => b.id === activeBoulder.id,
-                      )!;
-                      if (checked) b.placementIds.push(placement.id);
-                      else {
-                        b.placementIds = b.placementIds.filter(
-                          (id) => id !== placement.id,
-                        );
-                        b.startIds = b.startIds.filter(
-                          (id) => id !== placement.id,
-                        );
-                        b.finishIds = b.finishIds.filter(
-                          (id) => id !== placement.id,
-                        );
-                      }
-                    });
-                  }}
-                />
-                Inclure dans {activeBoulder.name}
-              </label>
-              {activeBoulder.placementIds.includes(placement.id) && (
-                <div className="preset-row">
-                  {(["startIds", "finishIds"] as const).map((key) => (
-                    <button
-                      className={
-                        activeBoulder[key].includes(placement.id)
-                          ? "active"
-                          : ""
-                      }
-                      key={key}
-                      onClick={() =>
-                        boulderUpdate({
-                          [key]: activeBoulder[key].includes(placement.id)
-                            ? activeBoulder[key].filter(
-                                (id) => id !== placement.id,
-                              )
-                            : [...activeBoulder[key], placement.id],
-                        })
-                      }
-                    >
-                      {key === "startIds" ? (
-                        <>
-                          <Crosshair size={13} />
-                          Départ
-                        </>
-                      ) : (
-                        <>
-                          <Flag size={13} />
-                          Arrivée
-                        </>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </>
+          <p className="field-note">
+            Les dimensions et la couleur se définissent dans la bibliothèque,
+            sans modifier les exemplaires déjà utilisés.
+          </p>
+          <button className="quiet-button" onClick={onCatalog}>
+            <BookOpen size={13} />
+            Ouvrir l’éditeur de modèles
+          </button>
+          <button
+            className="secondary duplicate-placement"
+            data-testid="placement-duplicate"
+            onClick={() => onDuplicate(placement.id)}
+          >
+            <Copy size={13} />
+            Dupliquer avec les pièces disponibles
+          </button>
+        </div>
       )}
       {(wall || placement) && (
         <div className="property-section">
@@ -487,98 +409,15 @@ export function PropertiesPanel({
           </button>
         </div>
       )}
-      <div className="property-section boulder-section">
-        <div className="section-title">
-          <h4>
-            <Mountain size={14} />
-            Blocs
-          </h4>
-          <button
-            className="icon-button small"
-            title="Créer un bloc"
-            aria-label="Créer un bloc"
-            onClick={() => {
-              const id = crypto.randomUUID();
-              edit((d) =>
-                d.boulders.push({
-                  id,
-                  name: `Bloc ${d.boulders.length + 1}`,
-                  grade: "",
-                  color: "#b4d77a",
-                  placementIds: [],
-                  startIds: [],
-                  finishIds: [],
-                }),
-              );
-              setActiveBoulderId(id);
-            }}
-          >
-            <Plus size={15} />
-          </button>
-        </div>
-        <select
-          aria-label="Bloc actif"
-          value={activeBoulderId ?? ""}
-          onChange={(e) => setActiveBoulderId(e.target.value || null)}
-        >
-          <option value="">Aucun bloc actif</option>
-          {scene.boulders.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name} {b.grade && `· ${b.grade}`}
-            </option>
-          ))}
-        </select>
-        {activeBoulder && (
-          <>
-            <label className="text-field">
-              Nom du bloc
-              <input
-                key={activeBoulder.id}
-                aria-label="Nom du bloc"
-                defaultValue={activeBoulder.name}
-                onBlur={(e) => {
-                  if (e.target.value.trim())
-                    boulderUpdate({ name: e.target.value });
-                }}
-              />
-            </label>
-            <div className="boulder-details">
-              <label className="text-field">
-                Cotation
-                <input
-                  key={`${activeBoulder.id}-grade`}
-                  aria-label="Cotation"
-                  defaultValue={activeBoulder.grade}
-                  placeholder="6a"
-                  onBlur={(e) => boulderUpdate({ grade: e.target.value })}
-                />
-              </label>
-              <label className="color-field">
-                Couleur
-                <input
-                  aria-label="Couleur du bloc"
-                  type="color"
-                  value={activeBoulder.color}
-                  onChange={(e) => boulderUpdate({ color: e.target.value })}
-                />
-              </label>
-            </div>
-            <label className="checkbox-line">
-              <input
-                type="checkbox"
-                checked={focusBoulder}
-                onChange={(e) => setFocusBoulder(e.target.checked)}
-              />
-              Isoler visuellement ce bloc
-            </label>
-            <span className="small-muted">
-              {activeBoulder.placementIds.length} prises ·{" "}
-              {activeBoulder.startIds.length} départs ·{" "}
-              {activeBoulder.finishIds.length} arrivées
-            </span>
-          </>
-        )}
-      </div>
+      <RoutePanel
+        scene={scene}
+        selected={selected}
+        edit={edit}
+        activeId={activeBoulderId}
+        setActiveId={setActiveBoulderId}
+        hiddenIds={hiddenRouteIds}
+        setHiddenIds={setHiddenRouteIds}
+      />
       <div className="theory-note">
         <CircleHelp size={15} />
         <p>

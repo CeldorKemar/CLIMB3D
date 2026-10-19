@@ -95,4 +95,42 @@ Des essais intermédiaires ont révélé et permis de corriger : un décalage vi
 
 Faire essayer les gestes de conception et le parcours de réservation au porteur du projet avant une nouvelle phase importante. Les priorités de la suite seront décidées à partir de cette recette, notamment l'ergonomie 3D, les formes de pans et le catalogue client. Le POC local ne doit pas être présenté comme un SaaS prêt à commercialiser.
 
-Points de retour locaux : `f545ab7` pour le cadrage/architecture documentaire et `c5bbaad` pour le premier POC. Un commit complémentaire conserve la correction et la validation du conteneur. Aucun push GitHub, hébergement public ou publication de l'environnement n'a été effectué. Les champs cloud install_script et start_skill sont enregistrés pour revue ; leur publication reste une action de l'utilisateur dans les paramètres de l'environnement.
+Points de retour : `f545ab7` pour le cadrage/architecture, `c5bbaad` pour le premier POC et `b14b33b` pour le conteneur vérifié. Le POC a ensuite été poussé, avec l’accord explicite du porteur du projet, sur la branche GitHub `poc/climbed-3d` afin de fournir un véritable téléchargement ZIP. Aucun hébergement public ni publication de l’environnement n’a été effectué. Les champs cloud install_script et start_skill restent enregistrés pour revue dans les paramètres.
+
+## Recette du POC — dix corrections demandées
+
+**État : implémentation et vérifications terminées pour les points 1–5 et 7–10 ; recherche du point 6 bloquée par le proxy. Validation utilisateur de ce lot attendue.**
+
+### Réalisation
+
+- Collisions sur les solides triangulés, formes concaves et contenance, entre pièces et pans différents ; contacts avec son propre support autorisés. Contrôle de l’empreinte d’appui sur le pan. Refus local et serveur avant toute persistance.
+- Ouverture des scènes anciennes sans réécriture ; avertissement sur les conflits hérités. Les changements ne peuvent pas introduire de nouveau contact ni déplacer une pièce en maintenant son conflit. Une restauration exige un document entièrement valide.
+- Toits exprimés en profondeur et pans en longueur réelle, avec hauteur et profondeur projetées. Assistant de murs composés, segments raccordés de bas en haut, exemple 1 m à 0°, 1 m à 30°, 1 m à 0°. Recentrage automatique après ajout.
+- Catalogue paramétrique séparé avec aperçu WebGL, création, modification, duplication et suppression de modèles inutilisés. Les modèles placés ou déjà inventoriés sont verrouillés ; leurs variantes ont un nouvel identifiant. Position et rotation restent modifiables dans la salle, sans redimensionner une pièce physique.
+- Brouillon de salle et historique local conservés pendant les passages salle/catalogue. Les changements de modèles sont sauvegardés explicitement avec le projet.
+- Voies multiples, prises et volumes associés à plusieurs voies, cases de visibilité et masquage réel du rendu ; les supports nécessaires aux enfants visibles restent affichés.
+- Stock disponible sur chaque tuile, modèle indisponible grisé, refus du placement et de la duplication dépassant les quantités. Prise en compte des besoins dessinés et des occupations compatibles ; les retours en attente restent indisponibles. Navigation du stock regroupée à gauche et titre à droite.
+- Déclaration explicite de quantité par administrateur ou responsable, auditée. Une diminution ne retire que des pièces libres et conserve leur histoire via `retired_at`.
+- Historique persistant immuable à chaque sauvegarde de salle, reprise des anciennes révisions, états nommés de salle ou de voie. Restauration transactionnelle avec intégrité, autorisations, révision, idempotence, collision et disponibilité compatible. La fusion de voie conserve les autres voies et refuse une ressource partagée incompatible. Aucun mouvement physique n’est confirmé implicitement.
+- Métadonnées facultatives de fixation et de provenance dans le contrat ; aucune cote fabricant supposée. Guide de mise à jour Windows conservant les données Docker.
+
+### Vérifications exécutées
+
+- `npm run setup:local` répété : migrations et seed idempotents, sans écraser les salles. Les révisions et quantités de placements des trois salles de développement sont restées identiques : 51/38, 20/38 et 3/10. Les 74 versions préexistantes ont été reprises dans l’historique par la migration additive.
+- `npm test` : **63/63 réussis**, aucun skip ni échec : 25 géométrie, 5 historique local, 6 planification pure, 27 intégrations PostgreSQL réelles.
+- `npm run build` après les corrections finales : contrôles TypeScript de tous les workspaces et build web réussis.
+- Campagne finale Playwright : **21/21 réussis en 1,6 min**, 11 HTTP et 10 parcours navigateur Chromium avec WebGL. Base séparée `climbed_e2e_test`, serveur compilé sans watch sur 3002. La base de développement n’a pas servi aux mutations de cette campagne.
+- Contrôles particuliers : création/édition/duplication/suppression de modèles, brouillon conservé sans sauvegarde, stock 0 et déclaration de quantité, voies partagées et masquage WebGL, segments raccordés et toit, refus des collisions, restauration via l’interface, pénurie, ressource partagée modifiée, révisions concurrentes et isolation. Un focus/sortie de champ conserve désormais une position non arrondie sans créer de modification.
+- Mesure ponctuelle Node sur 20 pans, 30 volumes et 500 prises : vérification de changement initialement autour de 1,3 s, puis autour de 20–34 ms à chaud après caches bornés des empreintes, réutilisation des boîtes de géométrie et mémoïsation des poses pendant l’opération. Ce n’est pas un benchmark GPU ni une mesure Windows.
+- Serveur habituel sur 3001 redémarré : santé SQL HTTP 200, connexion et consultation des deux éditeurs sans mutation de scène ni erreur JavaScript. Captures actuelles dans `docs/assets/poc-editor.png` et `docs/assets/poc-catalog.png`. Le serveur de test a été arrêté après la campagne. Aucun déploiement externe effectué.
+
+### Limites et blocage documentaire
+
+- **Point 6 incomplet :** sites fabricants, chemin candidat de PDF officiel, forums et recherche web renvoient `Tunnel connection failed: 403 Forbidden` au proxy. Aucune fiche réelle n’a été lue. Les tentatives, URLs et limites figurent dans [research.md](research.md). Il faut un accès réseau effectif ou des catalogues fournis pour renseigner des profils vérifiés ; les métadonnées seules ne remplacent pas ces preuves.
+- Catalogue du projet de salle, sans partage central entre les salles du client pour le moment. Éditeur sommaire limité aux familles paramétriques existantes ; ni sculpture libre, ni scan/import V2.
+- Pans rectangulaires et raccords créés à l’assemblage ; pas de solveur maintenant les arêtes communes après une retouche isolée. Le contour complet d’appui d’une prise sur un volume courbe n’est pas vérifié ; la détection ne certifie aucune fixation mécanique.
+- Historique listant les 200 dernières sauvegardes ; les anciennes restent en base. Une restauration de conception ne remplace pas une sauvegarde PostgreSQL contre la perte du volume.
+- L’interface bloque les nouveaux ajouts indisponibles ; l’API de conception conserve la possibilité technique de sauvegarder une scène théorique dépassant le stock. Réservation et restauration vérifient obligatoirement la faisabilité physique côté serveur.
+- Bundle de l’atelier toujours supérieur au seuil d’avertissement Vite : environ 1,066 Mo brut et 283 ko gzip. Windows, Firefox, Safari et fluidité sur un vrai laptop restent à vérifier. L’image Docker n’a pas été reconstruite pour ce lot ; sa précédente validation ne remplace pas ce contrôle ultérieur.
+
+Ce lot est livré sur la branche du POC. Le point de retour avant ces changements reste `b14b33b`. La suite de la V1 demeure soumise à la recette et à la validation du porteur du projet.

@@ -6,6 +6,16 @@ Les interventions du POC sont limitées à une sélection de pans. Un conflit de
 
 ## Décisions de cadrage retenues
 
+### Ajouts du lot de recette
+
+La migration additive `004_design_snapshots_and_inventory_retirement.sql` ajoute `design_snapshots` et reprend les révisions de `scene_versions` sans modifier les scènes de salle. Chaque sauvegarde ultérieure écrit sa révision et son entrée d’historique dans une transaction. Les entrées contiennent une scène JSONB entière, le périmètre salle/voie, le libellé, l’auteur, la révision source et une empreinte SHA-256 du contenu JSONB canonique. Un trigger refuse leur modification et suppression ordinaires. La liste présente les 200 dernières entrées ; les plus anciennes ne sont pas supprimées.
+
+Les associations plusieurs-à-plusieurs des voies se trouvent dans les `boulders[].placementIds` du document JSONB versionné. Elles acceptent prises et volumes ; les départs et arrivées restent des prises. Un élément partagé ne crée qu’un placement et n’exige qu’un exemplaire physique. Ce stockage n’implémente pas encore toutes les tables normalisées du modèle cible ci-dessous.
+
+La restauration utilise l’autorisation par salle, un verrou, une révision attendue et une clé d’idempotence. Elle vérifie l’intégrité de la sauvegarde, les références, les contacts, les modèles et le stock compatible avant toute écriture. Une voie est fusionnée en préservant les autres voies et leurs supports ; un objet partagé qui devrait être modifié provoque un refus. Le calcul peut conserver les pièces compatibles déjà affectées au même placement sans les compter deux fois ; les retours en attente restent indisponibles. Aucun état physique n’est réécrit par la restauration.
+
+La déclaration de quantité possède sa commande API, un contrôle de rôle, une clé d’idempotence et un audit. Une diminution ne peut retirer que des exemplaires libres. `stock_items.retired_at` conserve les anciens exemplaires et leur historique sans les proposer à une réservation. Les modèles déjà inventoriés gardent leur définition : changer la géométrie exige un nouveau modèle.
+
 - Un client est une organisation pouvant exploiter plusieurs salles. Les données des organisations sont isolées ; un accès à une organisation n'accorde pas implicitement accès à toutes ses salles.
 - Les modèles de murs, prises et volumes constituent un catalogue partagé au sein du client. Le stock physique appartient à une salle.
 - Les rôles sont superadmin fondateur, administrateur client, responsable de salle et ouvreur. La matrice détaillée d'actions reste à valider.

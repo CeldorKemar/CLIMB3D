@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import { sceneSchema } from '@climbed/contracts';
-import { validateScene } from '@climbed/geometry';
 import { databaseUrl, production, SESSION_COOKIE } from './config.ts';
 import { PostgresRepository, REPOSITORY, type ClimbedRepository, type AuthSession } from './repository.ts';
 
@@ -17,6 +16,10 @@ const saveBody = z.object({ scene: sceneSchema, expectedRevision: z.number().int
 const requestId = z.string().min(8).max(100).regex(/^[a-zA-Z0-9_-]+$/);
 const reserveBody = z.object({ sceneRevision: z.number().int().positive(), requestId, wallIds: z.array(z.string().min(1).max(100)).min(1).max(100).optional() }).strict();
 const actionBody = z.object({ action: z.enum(['withdraw', 'install', 'request_return', 'return', 'cancel']), requestId }).strict();
+const snapshotBody = z.object({ kind: z.enum(['room', 'boulder']), label: z.string().trim().min(1).max(120), boulderId: z.string().min(1).max(100).optional(), expectedRevision: z.number().int().positive(), requestId }).strict()
+  .refine(value => value.kind === 'boulder' ? !!value.boulderId : !value.boulderId, 'Une sauvegarde de voie exige son identifiant ; une sauvegarde de salle ne le prend pas.');
+const restoreBody = z.object({ expectedRevision: z.number().int().positive(), requestId }).strict();
+const inventoryBody = z.object({ modelId: z.string().min(1).max(100), total: z.number().int().min(0).max(10_000), expectedRevision: z.number().int().positive(), requestId }).strict();
 
 function parse<T>(schema: z.ZodType<T>, body: unknown): T {
   const result = schema.safeParse(body);
@@ -79,9 +82,22 @@ class ApiController {
   @Put('rooms/:id/scene') async save(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
     const session = await this.authenticate(request, true);
     const input = parse(saveBody, body);
-    const issues = validateScene(input.scene);
-    if (issues.length) throw new BadRequestException({ message: 'Géométrie ou références invalides.', details: issues });
     return this.repository.save(session, id, input.scene, input.expectedRevision);
+  }
+  @Get('rooms/:id/history') async history(@Req() request: Request, @Param('id') id: string) {
+    return this.repository.history(await this.authenticate(request), id);
+  }
+  @Post('rooms/:id/history') async snapshot(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
+    const session = await this.authenticate(request, true);
+    return this.repository.createSnapshot(session, id, parse(snapshotBody, body));
+  }
+  @Post('rooms/:id/history/:snapshotId/restore') async restore(@Req() request: Request, @Param('id') id: string, @Param('snapshotId') snapshotId: string, @Body() body: unknown) {
+    const session = await this.authenticate(request, true), input = parse(restoreBody, body);
+    return this.repository.restoreSnapshot(session, id, snapshotId, input.expectedRevision, input.requestId);
+  }
+  @Post('rooms/:id/inventory') async inventory(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
+    const session = await this.authenticate(request, true), input = parse(inventoryBody, body);
+    return this.repository.setInventory(session, id, input.modelId, input.total, input.expectedRevision, input.requestId);
   }
   @Post('rooms/:id/reservations') async reserve(@Req() request: Request, @Param('id') id: string, @Body() body: unknown) {
     const session = await this.authenticate(request, true);

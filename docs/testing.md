@@ -4,7 +4,7 @@ Ce document décrit la stratégie cible et ses critères. Certains scénarios so
 
 ## Ce qui doit être démontré
 
-Un ouvreur utilise un laptop pour construire une zone de bloc, équiper les surfaces et les volumes autorisés, composer des blocs et retrouver son projet après sauvegarde. Il peut concevoir sans contrainte de stock, puis réserver les pièces physiques disponibles avant de les prendre en réserve. L’installation et le retour physique nécessitent des confirmations distinctes. Les données restent isolées entre clients, avec des permissions limitées par salle.
+Un ouvreur utilise un laptop pour construire une zone de bloc, équiper les surfaces et les volumes autorisés, composer des voies et retrouver son projet après sauvegarde. La bibliothèque bloque les ajouts indisponibles ; le check-in confirme ensuite la disponibilité réelle face aux réservations concurrentes, avant de prendre les pièces en réserve. L’installation et le retour physique nécessitent des confirmations distinctes. Les données restent isolées entre clients, avec des permissions limitées par salle.
 
 La validation combine tests automatisés et essais par des ouvreurs. Un rendu convaincant ne démontre ni la cohérence du stock, ni la simplicité de l’interface ; chaque aspect possède ses propres critères.
 
@@ -131,8 +131,22 @@ WEB_BASE_URL=http://localhost:3001 npm run test:e2e
 
 En développement Vite (`npm run dev`), le port web de référence des tests est 5173 par défaut. Ne pas modifier les sources pendant une campagne : le redémarrage automatique de l'API peut interrompre une opération réelle.
 
-Les 15 tests d'intégration PostgreSQL réinitialisent uniquement la base dédiée indiquée par `TEST_DATABASE_URL`, dont le nom doit finir par `_test` et être distinct du nom de base de développement. Ne jamais y fournir une base contenant des données à conserver. En l'absence de cette configuration, ces tests sont explicitement skipped ; ce résultat ne valide pas le stock. `setup:local` crée `climbed_test` et le fichier de configuration local nécessaire.
+Les 27 tests d'intégration PostgreSQL réinitialisent uniquement la base dédiée indiquée par `TEST_DATABASE_URL`, dont le nom doit finir par `_test` et être distinct du nom de base de développement. Ne jamais y fournir une base contenant des données à conserver. En l'absence de cette configuration, ces tests sont explicitement skipped ; ce résultat ne valide pas le stock. `setup:local` crée `climbed_test` et le fichier de configuration local nécessaire.
 
 Les tests Playwright utilisent les comptes fictifs, restaurent les scènes et compensent uniquement les réservations créées par leur scénario. Une interruption de processus pendant la campagne peut laisser une réservation à résoudre explicitement ; elle n'autorise pas une réinitialisation globale.
 
 Chromium système est utilisé s'il existe à `/usr/bin/chromium`. Sinon, installer le navigateur correspondant avec `npx playwright install chromium`, ou renseigner `CHROMIUM_PATH`. Les rapports sont dans `playwright-report/` et les traces/captures dans `test-results/`, tous ignorés par Git. Le POC est vérifié sous Chromium ; Firefox, Safari et Windows restent à tester.
+
+## Recette des corrections
+
+La suite Vitest comprend 25 cas de géométrie, 5 d’historique local, 6 de planification pure et 27 d’intégration PostgreSQL. Les ajouts couvrent contacts et contenance, cavités réellement vides, collisions entre pans, empreintes d’appui, scènes anciennes, assemblage 0°/30°/0°, intégrité des sauvegardes et restaurations atomiques.
+
+Les nouveaux parcours Playwright vérifient le catalogue séparé sans perte du brouillon, les quantités et leur déclaration explicite, l’absence de personnalisation d’un placement, le vrai masquage WebGL de volumes partagés, les champs de toit, le refus de collision et l’historique depuis l’interface. Un contrôle conserve des coordonnées non arrondies après simple focus puis sortie d’un champ, sans édition.
+
+Pour cette campagne, le serveur web/API a été démarré sans watch sur le port 3002, avec `DATABASE_URL` visant la base **distincte** `climbed_e2e_test`, préalablement migrée et alimentée avec les seules fixtures. La commande était :
+
+```sh
+WEB_BASE_URL=http://127.0.0.1:3002 API_BASE_URL=http://127.0.0.1:3002/api/v1 npm run test:e2e
+```
+
+Ces deux variables choisissent les endpoints des tests ; elles ne changent pas la base utilisée par un serveur déjà démarré. Ne pas exécuter deux campagnes simultanées contre les mêmes salles. Les contextes HTTP de test réutilisent des sessions réelles conservées uniquement en mémoire du worker afin de respecter la limite de connexion ; les parcours navigateur passent toujours par le formulaire réel.

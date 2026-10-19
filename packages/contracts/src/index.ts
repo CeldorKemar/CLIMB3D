@@ -17,6 +17,27 @@ export type GeometrySource =
   | { type: 'parametric'; generatorVersion: 1 }
   | { type: 'mesh'; assetId: string; sha256: string; format: 'glb'; schemaVersion: 1 };
 
+export const fixingMetadataSchema = z.object({
+  method: z.enum(['unknown', 'bolt', 'screw', 'combined']).optional(),
+  holeDiameterMm: z.number().finite().positive().max(200).optional(),
+  threadDesignation: z.string().max(80).optional(),
+  threadSystem: z.enum(['unknown', 'metric', 'imperial']).optional(),
+  provenance: z.object({
+    status: z.enum(['unknown', 'user_supplied', 'documented']),
+    sourceUrl: z.string().url().optional(),
+    reference: z.string().max(300).optional(),
+    checkedAt: z.string().max(40).optional(),
+  }).strict().optional(),
+}).strict();
+export type FixingMetadata = z.infer<typeof fixingMetadataSchema>;
+export const fixingGridSchema = z.object({
+  pitchX: z.number().finite().positive().max(30),
+  pitchY: z.number().finite().positive().max(30),
+  offsetX: z.number().finite().optional(),
+  offsetY: z.number().finite().optional(),
+  rotationDegrees: z.number().finite().optional(),
+}).strict();
+
 export const modelSchema = z.object({
   id,
   version: z.literal(1),
@@ -26,6 +47,8 @@ export const modelSchema = z.object({
   dimensions: dimensionsSchema,
   color,
   source: z.object({ type: z.literal('parametric'), generatorVersion: z.literal(1) }).strict(),
+  fixing: fixingMetadataSchema.optional(),
+  fixingGrid: fixingGridSchema.optional(),
 }).strict();
 export type ModelDefinition = z.infer<typeof modelSchema>;
 
@@ -49,6 +72,8 @@ export const wallSchema = z.object({
   color,
   openings: z.array(openingSchema).max(20),
   fixingSpacing: z.number().finite().min(0.1).max(1),
+  fixing: fixingMetadataSchema.optional(),
+  fixingGrid: fixingGridSchema.optional(),
 }).strict();
 export type WallDefinition = z.infer<typeof wallSchema>;
 
@@ -112,12 +137,37 @@ export interface ReservationSummary {
   removedCount: number;
 }
 export interface AuditEntry { id: string; action: string; actorName: string; createdAt: string; detail: string }
+export interface SnapshotSummary {
+  id: string;
+  kind: 'room' | 'boulder';
+  label: string;
+  boulderId?: string;
+  sourceRevision: number;
+  createdAt: string;
+  actorName: string;
+}
+export interface CreateSnapshotRequest {
+  kind: 'room' | 'boulder';
+  label: string;
+  boulderId?: string;
+  expectedRevision: number;
+  requestId: string;
+}
+export interface HistoryResponse { snapshots: SnapshotSummary[] }
+export interface StockOccupation {
+  placementId: string;
+  model: ModelDefinition;
+  state: 'reserved' | 'taken' | 'installed' | 'return_pending';
+  reservationId: string;
+}
 export interface RoomState {
   scene: SceneDocument;
   revision: number;
   inventory: InventorySummary[];
   reservations: ReservationSummary[];
   audit: AuditEntry[];
+  occupations?: StockOccupation[];
+  lockedModelIds?: string[];
 }
 export interface BootstrapResponse { user: SessionUser; csrfToken: string; rooms: RoomSummary[] }
 export interface ApiErrorBody { message: string; code?: string; details?: unknown }

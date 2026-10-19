@@ -28,6 +28,10 @@ interface Props {
   onSelect: (id: string) => void;
   onModel: (model: ModelDefinition | undefined) => void;
   onAddWall: () => void;
+  onAddChain: () => void;
+  onCatalog: () => void;
+  remaining: Map<string, number>;
+  totals: Map<string, number>;
 }
 export function LibraryPanel({
   scene,
@@ -36,6 +40,10 @@ export function LibraryPanel({
   onSelect,
   onModel,
   onAddWall,
+  onAddChain,
+  onCatalog,
+  remaining,
+  totals,
 }: Props) {
   const [kind, setKind] = useState<"hold" | "volume">("hold");
   const [search, setSearch] = useState("");
@@ -111,13 +119,29 @@ export function LibraryPanel({
           <Plus size={15} />
           Ajouter un pan
         </button>
+        <button
+          className="add-wall"
+          data-testid="wall-chain-open"
+          onClick={onAddChain}
+        >
+          <Plus size={15} />
+          Créer un mur multi-inclinaisons
+        </button>
         <div className="section-label library-label">
           <span>
             <Box size={14} />
             BIBLIOTHÈQUE
           </span>
-          <span className="shared-badge">Client</span>
+          <span className="shared-badge">Projet</span>
         </div>
+        <button
+          className="catalog-open-button"
+          data-testid="catalog-open"
+          onClick={onCatalog}
+        >
+          Créer ou modifier les modèles
+          <Plus size={13} />
+        </button>
         <div className="segmented">
           <button
             className={kind === "hold" ? "active" : ""}
@@ -147,6 +171,12 @@ export function LibraryPanel({
               key={model.id}
               data-testid={`catalog-${model.id}`}
               aria-pressed={activeModel?.id === model.id}
+              disabled={(remaining.get(model.id) ?? 0) <= 0}
+              title={
+                (remaining.get(model.id) ?? 0) <= 0
+                  ? "Aucun exemplaire disponible pour un nouveau placement."
+                  : model.name
+              }
               className={`model-card ${activeModel?.id === model.id ? "active" : ""}`}
               onClick={() =>
                 onModel(activeModel?.id === model.id ? undefined : model)
@@ -164,6 +194,13 @@ export function LibraryPanel({
               <span>
                 {Math.round(model.dimensions[0] * 100)} ×{" "}
                 {Math.round(model.dimensions[1] * 100)} cm
+              </span>
+              <span
+                className="model-stock"
+                data-testid={`model-remaining-${model.id}`}
+              >
+                {Math.max(0, remaining.get(model.id) ?? 0)} disponibles{" "}
+                <small>/ {totals.get(model.id) ?? 0}</small>
               </span>
             </button>
           ))}

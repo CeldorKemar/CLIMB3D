@@ -1,3 +1,4 @@
+import { visiblePlacementIds } from "../domain/visibility";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
@@ -36,8 +37,7 @@ interface Props {
   view: { mode: ViewMode; seq: number };
   onSelect: (id: string | null) => void;
   onPlace: (point: SurfacePoint) => void;
-  activeBoulderId: string | null;
-  focusBoulder: boolean;
+  hiddenRouteIds: string[];
 }
 function Fixings({ wall }: { wall: WallDefinition }) {
   const geometry = useMemo(() => {
@@ -156,8 +156,7 @@ export function SceneCanvas(props: Props) {
     grid,
     onSelect,
     onPlace,
-    activeBoulderId,
-    focusBoulder,
+    hiddenRouteIds,
   } = props;
   const [hover, setHover] = useState<SurfacePoint | null>(null);
   const geometries = useMemo(
@@ -181,7 +180,10 @@ export function SceneCanvas(props: Props) {
     [wallGeometries],
   );
   useEffect(() => setHover(null), [activeModel?.id]);
-  const activeBoulder = scene.boulders.find((b) => b.id === activeBoulderId);
+  const visibleIds = useMemo(
+    () => visiblePlacementIds(scene, hiddenRouteIds),
+    [scene, hiddenRouteIds],
+  );
   function pointOnSurface(
     e: ThreeEvent<MouseEvent | PointerEvent>,
     type: "wall" | "volume",
@@ -251,6 +253,7 @@ export function SceneCanvas(props: Props) {
     );
   }
   function placementMesh(p: Placement) {
+    if (!visibleIds.has(p.id)) return null;
     const model = scene.models.find((m) => m.id === p.modelId);
     if (!model) return null;
     const geometry = geometries.get(model.id);
@@ -261,12 +264,6 @@ export function SceneCanvas(props: Props) {
           geometry={geometry}
           color={model.color}
           selected={selected === p.id}
-          faded={
-            focusBoulder &&
-            !!activeBoulder &&
-            model.kind === "hold" &&
-            !activeBoulder.placementIds.includes(p.id)
-          }
           onClick={(e) => clicked(e, model.kind, p.id)}
           onMove={
             model.kind === "volume"

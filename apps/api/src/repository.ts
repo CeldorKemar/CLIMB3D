@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { Pool, type PoolClient } from 'pg';
-import type { AuditEntry, BootstrapResponse, InventorySummary, ReservationAction, ReservationSummary, RoomState, SceneDocument, SessionUser } from '@climbed/contracts';
+import type { AuditEntry, BootstrapResponse, CreateSnapshotRequest, HistoryResponse, InventorySummary, ReservationAction, ReservationSummary, RoomState, SceneDocument, SessionUser, SnapshotSummary, StockOccupation } from '@climbed/contracts';
+import { validateScene, validateSceneChange } from '@climbed/geometry';
 import { fingerprint, token, digest, verifyPassword } from './security.ts';
 import { computeDelta, InvalidPlan, placementWall, PlanningConflict, wallScope } from './domain/planning.ts';
+import { mergeBoulderSnapshot } from './domain/restoration.ts';
 
 export interface AuthSession { user: SessionUser; csrfToken: string; tokenHash: string }
 export interface ClimbedRepository {
@@ -16,6 +18,10 @@ export interface ClimbedRepository {
   save(session: AuthSession, roomId: string, scene: SceneDocument, expectedRevision: number): Promise<RoomState>;
   reserve(session: AuthSession, roomId: string, revision: number, requestId: string, wallIds?: string[]): Promise<RoomState>;
   action(session: AuthSession, roomId: string, reservationId: string, action: ReservationAction, requestId: string): Promise<RoomState>;
+  history(session: AuthSession, roomId: string): Promise<HistoryResponse>;
+  createSnapshot(session: AuthSession, roomId: string, input: CreateSnapshotRequest): Promise<SnapshotSummary>;
+  restoreSnapshot(session: AuthSession, roomId: string, snapshotId: string, expectedRevision: number, requestId: string): Promise<RoomState>;
+  setInventory(session: AuthSession, roomId: string, modelId: string, total: number, expectedRevision: number, requestId: string): Promise<RoomState>;
 }
 type Db = Pick<Pool, 'query'> | PoolClient;
 type Occupation = {
@@ -84,7 +90,7 @@ export class PostgresRepository implements ClimbedRepository {
       count(*) FILTER(WHERE o.state='installed')::int AS installed,
       count(*) FILTER(WHERE o.state='return_pending')::int AS "returnPending"
       FROM stock_items s LEFT JOIN occupations o ON o.org_id=s.org_id AND o.item_id=s.id AND o.closed_at IS NULL
-      WHERE s.org_id=$1 AND s.room_id=$2 GROUP BY s.model_id ORDER BY s.model_id`, [org, roomId]);
+      WHERE s.org_id=$1 AND s.room_id=$2 AND s.retired_at IS NULL GROUP BY s.model_id ORDER BY s.model_id`, [org, roomId]);
     const reservations = await db.query(`SELECT r.id,r.state,u.name AS "actorName",r.created_at AS "createdAt",r.scene_revision AS "sceneRevision",
       cardinality(r.added_ids)+cardinality(r.retained_ids) AS "pieceCount",cardinality(r.added_ids) AS "addedCount",
       cardinality(r.retained_ids) AS "retainedCount",cardinality(r.removed_ids) AS "removedCount"
@@ -93,11 +99,17 @@ export class PostgresRepository implements ClimbedRepository {
     const audit = await db.query(`SELECT e.id,e.action,u.name AS "actorName",e.created_at AS "createdAt",e.detail
       FROM audit_events e JOIN app_users u ON u.id=e.actor_id AND u.org_id=e.org_id
       WHERE e.org_id=$1 AND e.room_id=$2 ORDER BY e.created_at DESC LIMIT 80`, [org, roomId]);
+    const occupations = await db.query(`SELECT o.placement_id AS "placementId",o.state,o.reservation_id AS "reservationId",
+      COALESCE(o.actual_placement->'model',o.target_placement->'model') AS model
+      FROM occupations o WHERE o.org_id=$1 AND o.room_id=$2 AND o.closed_at IS NULL ORDER BY o.id`, [org, roomId]);
+    const historicalModels = await db.query('SELECT DISTINCT model_id FROM stock_items WHERE org_id=$1 AND room_id=$2', [org, roomId]);
     return {
       scene: room.rows[0].scene, revision: room.rows[0].revision,
       inventory: stock.rows as InventorySummary[],
       reservations: reservations.rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })) as ReservationSummary[],
       audit: audit.rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })) as AuditEntry[],
+      occupations: occupations.rows as StockOccupation[],
+      lockedModelIds: [...new Set<string>([...historicalModels.rows.map(row => row.model_id as string), ...room.rows[0].scene.placements.map((p: { modelId: string }) => p.modelId)])],
     };
   }
 
@@ -121,15 +133,23 @@ export class PostgresRepository implements ClimbedRepository {
     return this.transaction(async db => {
       const room = await this.authorize(db, session, roomId, true);
       if (room.revision !== expectedRevision) throw conflict('Le plan a changé. Rechargez avant de sauvegarder.');
-      const revision = room.revision + 1;
-      await db.query('UPDATE rooms SET scene=$3,revision=$4 WHERE org_id=$1 AND id=$2', [room.org_id, roomId, scene, revision]);
-      await db.query('INSERT INTO scene_versions(id,org_id,room_id,revision,scene,actor_id) VALUES($1,$2,$3,$4,$5,$6)', [randomUUID(), room.org_id, roomId, revision, scene, session.user.id]);
+      const issues = validateSceneChange(room.scene, scene);
+      if (issues.length) throw new BadRequestException({ message: 'Géométrie ou références invalides.', details: issues });
+      await this.assertCatalogVersions(db, room.org_id, roomId, scene, room.scene);
+      const revision = await this.writeScene(db, session, roomId, scene, room.revision);
       await this.audit(db, session, roomId, 'scene.saved', `Plan sauvegardé, version ${revision}. Aucun stock consommé.`);
       return this.state(db, session, roomId);
     });
   }
 
   private async idempotent(session: AuthSession, roomId: string, operation: string, requestId: string, payload: unknown, run: (db: PoolClient, room: { scene: SceneDocument; revision: number }) => Promise<void>) {
+    return this.idempotentResult(session, roomId, operation, requestId, payload, async (db, room) => {
+      await run(db, room);
+      return this.state(db, session, roomId);
+    });
+  }
+
+  private async idempotentResult<T>(session: AuthSession, roomId: string, operation: string, requestId: string, payload: unknown, run: (db: PoolClient, room: { scene: SceneDocument; revision: number }) => Promise<T>): Promise<T> {
     return this.transaction(async db => {
       const room = await this.authorize(db, session, roomId, true);
       const scope = [session.user.organizationId, roomId, session.user.id, operation, requestId];
@@ -138,10 +158,9 @@ export class PostgresRepository implements ClimbedRepository {
       // Replay precedes revision checking: a successful old request stays safely replayable.
       if (old.rowCount) {
         if (old.rows[0].payload_hash !== hash) throw conflict('Clé de requête déjà utilisée avec un contenu différent.');
-        return old.rows[0].response as RoomState;
+        return old.rows[0].response as T;
       }
-      await run(db, room);
-      const response = await this.state(db, session, roomId);
+      const response = await run(db, room);
       await db.query('INSERT INTO idempotency(org_id,room_id,actor_id,operation,request_id,payload_hash,response) VALUES($1,$2,$3,$4,$5,$6,$7)', [...scope, hash, response]);
       return response;
     });
@@ -151,6 +170,99 @@ export class PostgresRepository implements ClimbedRepository {
     await db.query('SELECT id FROM stock_items WHERE org_id=$1 AND room_id=$2 ORDER BY id FOR UPDATE', [org, room]);
     return (await db.query(`SELECT o.*,s.model_fingerprint FROM occupations o JOIN stock_items s ON s.org_id=o.org_id AND s.room_id=o.room_id AND s.id=o.item_id
       WHERE o.org_id=$1 AND o.room_id=$2 AND o.closed_at IS NULL ORDER BY o.id FOR UPDATE OF o`, [org, room])).rows as Occupation[];
+  }
+
+  private async writeScene(db: PoolClient, session: AuthSession, roomId: string, scene: SceneDocument, previousRevision: number) {
+    const revision = previousRevision + 1, org = session.user.organizationId, versionId = randomUUID();
+    await db.query('UPDATE rooms SET scene=$3,revision=$4 WHERE org_id=$1 AND id=$2 AND revision=$5', [org, roomId, scene, revision, previousRevision]);
+    await db.query('INSERT INTO scene_versions(id,org_id,room_id,revision,scene,actor_id) VALUES($1,$2,$3,$4,$5,$6)', [versionId, org, roomId, revision, scene, session.user.id]);
+    await db.query(`INSERT INTO design_snapshots(id,org_id,room_id,actor_id,kind,label,source_revision,scene,content_hash)
+      VALUES($1,$2,$3,$4,'room',$5,$6,$7,encode(sha256(convert_to($7::jsonb::text,'UTF8')),'hex'))`, [versionId, org, roomId, session.user.id, `Sauvegarde v${revision}`, revision, scene]);
+    return revision;
+  }
+
+  private async assertCatalogVersions(db: PoolClient, org: string, roomId: string, scene: SceneDocument, previous: SceneDocument) {
+    const rows = await db.query('SELECT model_id,model_fingerprint,bool_or(retired_at IS NULL) AS active FROM stock_items WHERE org_id=$1 AND room_id=$2 GROUP BY model_id,model_fingerprint', [org, roomId]);
+    if (rows.rows.some(row => row.active && !scene.models.some(model => model.id === row.model_id))) throw conflict('Un modèle possédant du stock actif ne peut pas être supprimé du catalogue.');
+    for (const model of scene.models) {
+      if (rows.rows.some(row => row.model_id === model.id && row.model_fingerprint !== fingerprint(model))) throw conflict('Un modèle inventorié est immuable : dupliquez-le sous un nouvel identifiant pour modifier sa géométrie.');
+      const old = previous.models.find(m => m.id === model.id);
+      if (old && previous.placements.some(p => p.modelId === model.id) && fingerprint(old) !== fingerprint(model)) throw conflict('Un modèle placé est immuable : dupliquez-le pour modifier sa définition.');
+    }
+  }
+
+  private async availableStock(db: PoolClient, org: string, roomId: string) {
+    return (await db.query(`SELECT s.* FROM stock_items s WHERE s.org_id=$1 AND s.room_id=$2 AND s.retired_at IS NULL AND s.physical_state='in_storage'
+      AND NOT EXISTS(SELECT 1 FROM occupations o WHERE o.org_id=s.org_id AND o.item_id=s.id AND o.closed_at IS NULL) ORDER BY s.id`, [org, roomId])).rows;
+  }
+
+  async history(session: AuthSession, roomId: string): Promise<HistoryResponse> {
+    await this.authorize(this.pool, session, roomId);
+    const result = await this.pool.query(`SELECT s.id,s.kind,s.label,s.boulder_id AS "boulderId",s.source_revision AS "sourceRevision",s.created_at AS "createdAt",u.name AS "actorName"
+      FROM design_snapshots s JOIN app_users u ON u.org_id=s.org_id AND u.id=s.actor_id
+      WHERE s.org_id=$1 AND s.room_id=$2 ORDER BY s.created_at DESC,s.id DESC LIMIT 200`, [session.user.organizationId, roomId]);
+    return { snapshots: result.rows.map(row => ({ ...row, boulderId: row.boulderId ?? undefined, createdAt: row.createdAt.toISOString() })) };
+  }
+
+  async createSnapshot(session: AuthSession, roomId: string, input: CreateSnapshotRequest): Promise<SnapshotSummary> {
+    const { requestId, ...payload } = input;
+    return this.idempotentResult(session, roomId, 'snapshot.create', requestId, payload, async (db, room) => {
+      if (room.revision !== input.expectedRevision) throw conflict('Le plan a changé avant la sauvegarde.');
+      if (input.kind === 'boulder' && !room.scene.boulders.some(b => b.id === input.boulderId)) throw new NotFoundException('Voie introuvable.');
+      const id = randomUUID();
+      const result = await db.query(`INSERT INTO design_snapshots(id,org_id,room_id,actor_id,kind,label,boulder_id,source_revision,scene,content_hash)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,encode(sha256(convert_to($9::jsonb::text,'UTF8')),'hex')) RETURNING created_at`, [id, session.user.organizationId, roomId, session.user.id, input.kind, input.label, input.boulderId ?? null, room.revision, room.scene]);
+      await this.audit(db, session, roomId, 'snapshot.created', `Sauvegarde ${input.kind === 'room' ? 'de salle' : 'de voie'} « ${input.label} » à la révision ${room.revision}.`);
+      return { id, kind: input.kind, label: input.label, boulderId: input.boulderId, sourceRevision: room.revision, createdAt: result.rows[0].created_at.toISOString(), actorName: session.user.name };
+    });
+  }
+
+  async restoreSnapshot(session: AuthSession, roomId: string, snapshotId: string, expectedRevision: number, requestId: string) {
+    if (!uuid.test(snapshotId)) throw new NotFoundException('Sauvegarde introuvable.');
+    return this.idempotent(session, roomId, `snapshot.restore:${snapshotId}`, requestId, { expectedRevision }, async (db, room) => {
+      if (room.revision !== expectedRevision) throw conflict('Le plan a changé avant la restauration.');
+      const org = session.user.organizationId;
+      const found = await db.query("SELECT *,encode(sha256(convert_to(scene::text,'UTF8')),'hex')=content_hash AS integrity_valid FROM design_snapshots WHERE org_id=$1 AND room_id=$2 AND id=$3", [org, roomId, snapshotId]);
+      if (!found.rowCount) throw new NotFoundException('Sauvegarde introuvable.');
+      const saved = found.rows[0];
+      if (!saved.integrity_valid) throw conflict('Intégrité de la sauvegarde invalide.');
+      const candidate = saved.kind === 'room' ? saved.scene as SceneDocument : mergeBoulderSnapshot(room.scene, saved.scene, saved.boulder_id, (a, b) => fingerprint(a) === fingerprint(b));
+      const issues = validateScene(candidate);
+      if (issues.length) throw new ConflictException({ message: 'Restauration impossible : géométrie ou collisions invalides.', code: 'INVALID_RESTORE', details: issues });
+      await this.assertCatalogVersions(db, org, roomId, candidate, room.scene);
+      const occupied = await this.lockStock(db, org, roomId);
+      const available = await this.availableStock(db, org, roomId);
+      // A compatible piece already allocated to the same placement remains reusable.
+      // This is a feasibility calculation only; no physical state, reservation or quantity changes.
+      const reusable = occupied.map(o => ({ ...o, state: ['reserved', 'taken', 'installed'].includes(o.state) ? 'installed' : o.state }));
+      computeDelta(candidate, reusable, available, wallScope(candidate, reusable, null), fingerprint);
+      const revision = await this.writeScene(db, session, roomId, candidate, room.revision);
+      await this.audit(db, session, roomId, 'snapshot.restored', `Sauvegarde « ${saved.label} » restaurée en version ${revision}. Aucun stock physique modifié.`);
+    });
+  }
+
+  async setInventory(session: AuthSession, roomId: string, modelId: string, total: number, expectedRevision: number, requestId: string) {
+    return this.idempotent(session, roomId, 'inventory.set', requestId, { modelId, total, expectedRevision }, async (db, room) => {
+      if (!['admin', 'manager', 'superadmin'].includes(session.user.role)) throw new ForbiddenException('Seul un administrateur ou responsable peut déclarer le stock.');
+      if (room.revision !== expectedRevision) throw conflict('Le plan a changé avant la déclaration de stock.');
+      if (!Number.isInteger(total) || total < 0 || total > 10_000) throw new BadRequestException('Quantité de stock invalide.');
+      const model = room.scene.models.find(m => m.id === modelId);
+      if (!model) throw new NotFoundException('Modèle introuvable.');
+      const org = session.user.organizationId, hash = fingerprint(model);
+      await this.lockStock(db, org, roomId);
+      const active = await db.query('SELECT id,model_fingerprint FROM stock_items WHERE org_id=$1 AND room_id=$2 AND model_id=$3 AND retired_at IS NULL ORDER BY id', [org, roomId, modelId]);
+      if (active.rows.some(row => row.model_fingerprint !== hash)) throw conflict('Le stock existant appartient à une autre définition de ce modèle.');
+      const delta = total - active.rows.length;
+      if (delta > 0) {
+        await db.query(`INSERT INTO stock_items(id,org_id,room_id,model_id,model_fingerprint)
+          SELECT gen_random_uuid(),$1,$2,$3,$4 FROM generate_series(1,$5::int)`, [org, roomId, modelId, hash, delta]);
+      } else if (delta < 0) {
+        const free = (await this.availableStock(db, org, roomId)).filter(item => item.model_id === modelId);
+        if (free.length < -delta) throw conflict('Des pièces sont réservées, installées ou dues au stock : réduction refusée.');
+        await db.query('UPDATE stock_items SET retired_at=now() WHERE org_id=$1 AND room_id=$2 AND id=ANY($3::uuid[])', [org, roomId, free.slice(0, -delta).map(item => item.id)]);
+      }
+      await this.audit(db, session, roomId, 'inventory.declared', `Stock déclaré pour « ${model.name} » : ${total} exemplaire(s).`);
+    });
   }
 
   async reserve(session: AuthSession, roomId: string, revision: number, requestId: string, requestedWallIds?: string[]) {
@@ -163,8 +275,7 @@ export class PostgresRepository implements ClimbedRepository {
       const open = await db.query("SELECT id FROM reservations WHERE org_id=$1 AND room_id=$2 AND state IN ('reserved','taken','return_pending') AND wall_ids && $3::text[]", [org, roomId, wallIds]);
       if (open.rowCount) throw conflict('Une intervention est déjà ouverte sur un pan sélectionné.');
       const models = new Map(room.scene.models.map(m => [m.id, m]));
-      const available = (await db.query(`SELECT s.* FROM stock_items s WHERE s.org_id=$1 AND s.room_id=$2 AND s.physical_state='in_storage'
-        AND NOT EXISTS(SELECT 1 FROM occupations o WHERE o.org_id=s.org_id AND o.item_id=s.id AND o.closed_at IS NULL) ORDER BY s.id`, [org, roomId])).rows;
+      const available = await this.availableStock(db, org, roomId);
       const { retained, add, removed } = computeDelta(room.scene, allOccupied, available, wallIds, fingerprint);
       const reservationId = randomUUID();
       await db.query('INSERT INTO reservations(id,org_id,room_id,actor_id,state,scene_revision,target_scene,retained_ids,removed_ids,wall_ids) VALUES($1,$2,$3,$4,\'reserved\',$5,$6,$7,$8,$9)', [reservationId, org, roomId, session.user.id, revision, room.scene, retained.map(o => o.id), removed.map(o => o.id), wallIds]);

@@ -9,7 +9,7 @@
 | F01 | Validé | Priorité à l’éditeur 3D pour le bloc, sur laptop. Les tableaux de bord ne remplacent pas cette démonstration. |
 | F02 | Validé | Un client peut gérer plusieurs salles ; catalogue de modèles partagé au sein du client. |
 | F03 | Validé | Superadmin plateforme, admin client, responsable de salle et ouvreur avec périmètres distincts. |
-| F04 | Validé | Conception théorique libre, indépendante du stock disponible. |
+| F04 | Remplacé lors de la recette | La conception ne réserve aucun stock, mais la bibliothèque bloque désormais l’ajout d’un modèle indisponible. |
 | F05 | Validé | Check-in = réservation avant déplacement en réserve ; installation confirmée séparément. |
 | F06 | Validé | Modification par différence : réserver les ajouts, libérer les retraits après démontage/retour. |
 | F07 | Validé | V1 : mur → volume → prises. Volume sur volume absent du POC, possibilité à préserver. |
@@ -34,6 +34,16 @@
 | X03 | Reporté | Paiement et souscription autonome, application mobile native, compétitions et IA. |
 
 ## Arbitrages structurants
+
+### Décisions issues de la recette du POC
+
+Les dix corrections demandées autorisent le lot courant. La bibliothèque bloque les ajouts indisponibles ; le check-in reste nécessaire pour garantir la disponibilité face aux autres ouvreurs. Les dimensions et couleurs d’une pièce se renseignent dans le catalogue, pas sur son placement. Un modèle inventorié ou placé ne se modifie pas rétroactivement ; la duplication crée une variante distincte.
+
+Les trois segments de l’exemple sont raccordés à leur création, avec des inclinaisons absolues de 0°, 30° et 0°. Une retouche ultérieure d’un pan ne propage pas encore une contrainte d’arête aux pans voisins.
+
+Les sauvegardes sont restaurables sous réserve d’une géométrie et d’un stock compatibles. Une restauration de voie conserve les autres voies ; un conflit sur une ressource partagée entraîne un refus. Cette restauration de conception ne confirme aucune installation physique.
+
+Les recherches fabricant ont été renouvelées mais restent bloquées au proxy. Les dimensions génériques et les trames saisies ne sont pas des références fabricant vérifiées.
 
 ### Isolation logique ou instances physiques
 

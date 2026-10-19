@@ -29,6 +29,16 @@ suite('PostgreSQL réel : isolation, stock atomique et états physiques', () => 
     return result.reservations[0]!.id;
   };
   const action = (id: string, action: 'withdraw' | 'install' | 'cancel' | 'request_return' | 'return') => repository.action(alice, fixtures.roomA, id, action, request());
+  const capture = async (kind: 'room' | 'boulder' = 'room', boulderId?: string) => {
+    const state = await repository.room(alice, fixtures.roomA);
+    return repository.createSnapshot(alice, fixtures.roomA, { kind, boulderId, label: 'Point de retour de test', expectedRevision: state.revision, requestId: request() });
+  };
+  const routeScene = (): SceneDocument => {
+    const scene = testScene();
+    scene.placements = [{ ...wallPlacement('route-hold', 'hold-jug'), position: [-1, 2, 0] }];
+    scene.boulders = [{ id: 'route-to-restore', name: 'Voie sauvegardée', grade: '5c', color: '#f07c54', placementIds: ['route-hold'], startIds: ['route-hold'], finishIds: ['route-hold'] }];
+    return scene;
+  };
 
   beforeAll(async () => {
     if (!testUrl || !new URL(testUrl).pathname.endsWith('_test') || new URL(testUrl).pathname === new URL(databaseUrl()).pathname) throw new Error('Intégration refusée : TEST_DATABASE_URL doit cibler une base distincte suffixée _test.');
@@ -250,5 +260,151 @@ suite('PostgreSQL réel : isolation, stock atomique et états physiques', () => 
     const row = (await pool.query('SELECT * FROM occupations WHERE reservation_id=$1', [id])).rows[0];
     await expect(pool.query("INSERT INTO occupations(id,org_id,room_id,item_id,placement_id,state,reservation_id,target_placement,wall_id) VALUES($1,$2,$3,$4,'duplicate','reserved',$5,'{}',$6)", [randomUUID(), row.org_id, row.room_id, row.item_id, id, row.wall_id])).rejects.toMatchObject({ code: '23505' });
     await expect(pool.query('INSERT INTO room_access(org_id,room_id,user_id) VALUES($1,$2,$3)', [fixtures.other, fixtures.roomA, clara.user.id])).rejects.toMatchObject({ code: '23503' });
+  });
+
+  it('rend chaque sauvegarde listable, immuable et restaurable sans changer le stock réel', async () => {
+    const original = await save(oneVolume());
+    const history = await repository.history(alice, fixtures.roomA);
+    const snapshot = history.snapshots.find(s => s.sourceRevision === original.revision)!;
+    expect(snapshot.label).toBe(`Sauvegarde v${original.revision}`);
+    const empty = await save(testScene());
+    const before = await pool.query('SELECT id,physical_state,retired_at FROM stock_items ORDER BY id');
+    const restored = await repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, empty.revision, request());
+    expect(restored.scene).toEqual(original.scene); expect(restored.revision).toBe(empty.revision + 1);
+    expect((await pool.query('SELECT id,physical_state,retired_at FROM stock_items ORDER BY id')).rows).toEqual(before.rows);
+    expect((await pool.query('SELECT count(*)::int AS n FROM occupations')).rows[0].n).toBe(0);
+    await expect(pool.query('UPDATE design_snapshots SET label=$2 WHERE id=$1', [snapshot.id, 'modifié'])).rejects.toMatchObject({ code: '23000' });
+  });
+
+  it('restaure une voie avec son volume ancêtre tout en préservant une autre voie', async () => {
+    const source = oneVolume();
+    source.placements.push({ ...wallPlacement('child-route', 'hold-jug'), parentType: 'volume', parentId: 'physical-target', position: [0, 0, 0.25] });
+    source.boulders = [{ id: 'saved-child-route', name: 'Voie sur volume', grade: '6a', color: '#f07c54', placementIds: ['child-route'], startIds: ['child-route'], finishIds: ['child-route'] }];
+    await save(source); const snapshot = await capture('boulder', 'saved-child-route');
+    const other = routeScene(); other.placements[0]!.parentId = 'wall-side';
+    const current = await save(other);
+    const restored = await repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, current.revision, request());
+    expect(restored.scene.boulders.find(b => b.id === 'route-to-restore')).toEqual(other.boulders[0]);
+    expect(restored.scene.placements.find(p => p.id === 'physical-target')).toEqual(source.placements[0]);
+    expect(restored.scene.placements.find(p => p.id === 'child-route')!.parentId).toBe('physical-target');
+    expect(restored.scene.boulders).toHaveLength(2);
+  });
+
+  it('refuse une restauration de voie en collision sans effet partiel', async () => {
+    const source = routeScene(); await save(source); const snapshot = await capture('boulder', 'route-to-restore');
+    const current = routeScene(); current.placements[0]!.position = [1, 2, 0];
+    current.placements.push({ ...wallPlacement('foreign-hold', 'hold-jug'), position: [-1, 2, 0] });
+    current.boulders.push({ ...current.boulders[0]!, id: 'foreign-route', placementIds: ['foreign-hold'], startIds: ['foreign-hold'], finishIds: ['foreign-hold'] });
+    const before = await save(current);
+    await expect(repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, before.revision, request())).rejects.toMatchObject({ status: 409 });
+    const after = await repository.room(alice, fixtures.roomA);
+    expect(after.scene).toEqual(before.scene); expect(after.revision).toBe(before.revision); expect(after.audit).toEqual(before.audit);
+  });
+
+  it('protège une prise partagée modifiée lors de la restauration d’une seule voie', async () => {
+    const source = routeScene(); await save(source); const snapshot = await capture('boulder', 'route-to-restore');
+    const current = routeScene(); current.placements[0]!.position = [1, 2, 0];
+    current.boulders.push({ ...current.boulders[0]!, id: 'foreign-shared-route', name: 'Autre voie' });
+    const before = await save(current);
+    await expect(repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, before.revision, request())).rejects.toMatchObject({ status: 409 });
+    const after = await repository.room(alice, fixtures.roomA);
+    expect(after.scene).toEqual(before.scene); expect(after.scene.boulders[1]!.placementIds).toEqual(['route-hold']);
+  });
+
+  it('restaure les attributs d’une voie sur une prise partagée inchangée sans dupliquer la pièce', async () => {
+    const source = routeScene(); await save(source); const snapshot = await capture('boulder', 'route-to-restore');
+    const current = routeScene(); current.boulders[0]!.grade = '7a';
+    const foreign = { ...structuredClone(current.boulders[0]!), id: 'foreign-shared-route', name: 'Voie étrangère', grade: '4c' };
+    current.boulders.push(foreign);
+    const before = await save(current);
+    const restored = await repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, before.revision, request());
+    expect(restored.scene.boulders.find(b => b.id === 'route-to-restore')!.grade).toBe('5c');
+    expect(restored.scene.boulders.find(b => b.id === foreign.id)).toEqual(foreign);
+    expect(restored.scene.placements).toHaveLength(1);
+    expect(restored.inventory.find(i => i.modelId === 'hold-jug')!.available).toBe(12);
+  });
+
+  it('refuse une restauration sans stock compatible et accepte une déclaration explicite sans réserver', async () => {
+    const source = testScene(), base = source.models.find(m => m.id === 'volume-box')!;
+    source.models.push({ ...base, id: 'custom-box', name: 'Volume personnalisé', dimensions: [0.6, 0.4, 0.2] });
+    source.placements = [wallPlacement('custom-placement', 'custom-box')];
+    await save(source); const snapshot = await capture();
+    const empty = structuredClone(source); empty.placements = [];
+    let state = await save(empty);
+    await expect(repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, state.revision, request())).rejects.toMatchObject({ status: 409 });
+    expect((await repository.room(alice, fixtures.roomA)).revision).toBe(state.revision);
+    state = await repository.setInventory(alice, fixtures.roomA, 'custom-box', 2, state.revision, request());
+    expect(state.inventory.find(i => i.modelId === 'custom-box')!.total).toBe(2);
+    state = await repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, state.revision, request());
+    expect(state.scene.placements[0]!.modelId).toBe('custom-box');
+    expect(state.inventory.find(i => i.modelId === 'custom-box')!.available).toBe(2);
+    expect(state.occupations).toEqual([]);
+  });
+
+  it('compte une occupation compatible conservée pour restaurer sans double réservation', async () => {
+    await save(oneVolume()); const snapshot = await capture();
+    const id = await reserve(); await action(id, 'withdraw'); await action(id, 'install');
+    const empty = await save(testScene());
+    const state = await repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, empty.revision, request());
+    expect(state.inventory.find(i => i.modelId === 'volume-box')!.installed).toBe(1);
+    expect(state.inventory.find(i => i.modelId === 'volume-box')!.available).toBe(0);
+    expect(state.occupations).toHaveLength(1);
+  });
+
+  it('sérialise deux restaurations concurrentes et rejoue la gagnante sans nouvelle version', async () => {
+    await save(oneVolume()); const snapshot = await capture();
+    const empty = await save(testScene()), keyA = request(), keyB = request();
+    const outcomes = await Promise.allSettled([
+      repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, empty.revision, keyA),
+      repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, empty.revision, keyB),
+    ]);
+    expect(outcomes.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter(r => r.status === 'rejected')).toHaveLength(1);
+    const winner = outcomes.findIndex(r => r.status === 'fulfilled');
+    const replay = await repository.restoreSnapshot(alice, fixtures.roomA, snapshot.id, empty.revision, winner === 0 ? keyA : keyB);
+    expect(replay.revision).toBe(empty.revision + 1);
+    expect((await repository.room(alice, fixtures.roomA)).revision).toBe(empty.revision + 1);
+  });
+
+  it('isole les historiques et sauvegardes par organisation et salle', async () => {
+    await save(oneVolume()); const snapshot = await capture();
+    await expect(repository.history(clara, fixtures.roomA)).rejects.toMatchObject({ status: 404 });
+    await expect(repository.restoreSnapshot(clara, fixtures.roomC, snapshot.id, 1, request())).rejects.toMatchObject({ status: 404 });
+    await expect(repository.restoreSnapshot(alice, fixtures.roomB, snapshot.id, 1, request())).rejects.toMatchObject({ status: 404 });
+    await expect(repository.history(bob, fixtures.roomB)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('réserve les déclarations de stock aux responsables et refuse de retirer une pièce occupée', async () => {
+    const state = await save(oneVolume());
+    await expect(repository.setInventory(bob, fixtures.roomA, 'volume-box', 0, state.revision, request())).rejects.toMatchObject({ status: 403 });
+    const id = await reserve();
+    await expect(repository.setInventory(alice, fixtures.roomA, 'volume-box', 0, state.revision, request())).rejects.toMatchObject({ status: 409 });
+    await action(id, 'cancel');
+    const adjusted = await repository.setInventory(alice, fixtures.roomA, 'volume-box', 0, state.revision, request());
+    expect(adjusted.inventory.find(i => i.modelId === 'volume-box')).toBeUndefined();
+    expect((await pool.query("SELECT count(*)::int AS n FROM stock_items WHERE model_id='volume-box' AND room_id=$1", [fixtures.roomA])).rows[0].n).toBe(1);
+  });
+
+  it('verrouille les modèles inventoriés même après retrait et interdit leur suppression avec stock actif', async () => {
+    let state = await save(testScene());
+    const changed = testScene(); changed.models.find(m => m.id === 'volume-box')!.dimensions = [0.6, 0.4, 0.2];
+    await expect(repository.save(alice, fixtures.roomA, changed, state.revision)).rejects.toMatchObject({ status: 409 });
+    const removed = testScene(); removed.models = removed.models.filter(m => m.id !== 'volume-box');
+    await expect(repository.save(alice, fixtures.roomA, removed, state.revision)).rejects.toMatchObject({ status: 409 });
+    state = await repository.setInventory(alice, fixtures.roomA, 'volume-box', 0, state.revision, request());
+    expect(state.lockedModelIds).toContain('volume-box');
+    await expect(repository.save(alice, fixtures.roomA, changed, state.revision)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('permet l’édition d’un modèle neuf inutilisé puis verrouille sa définition dès son placement', async () => {
+    const scene = testScene(), model = { ...scene.models.find(m => m.id === 'volume-box')!, id: 'editable-custom' };
+    scene.models.push(model); await save(scene);
+    model.dimensions = [0.6, 0.4, 0.2];
+    await save(scene);
+    scene.placements = [wallPlacement('editable-target', model.id)];
+    const placed = await save(scene);
+    expect(placed.lockedModelIds).toContain(model.id);
+    model.dimensions = [0.7, 0.4, 0.2];
+    await expect(repository.save(alice, fixtures.roomA, scene, placed.revision)).rejects.toMatchObject({ status: 409 });
   });
 });

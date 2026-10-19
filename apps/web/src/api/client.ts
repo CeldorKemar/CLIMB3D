@@ -3,6 +3,9 @@ import type {
   ReservationAction,
   RoomState,
   SceneDocument,
+  HistoryResponse,
+  SnapshotSummary,
+  CreateSnapshotRequest,
 } from "@climbed/contracts";
 export class ApiError extends Error {
   constructor(
@@ -39,6 +42,48 @@ export const api = {
     request<void>("/auth/logout", {
       method: "POST",
       headers: { "x-csrf-token": csrf },
+    }),
+  history: (id: string) =>
+    request<HistoryResponse>(`/rooms/${encodeURIComponent(id)}/history`),
+  createSnapshot: (id: string, body: CreateSnapshotRequest, csrf: string) =>
+    request<SnapshotSummary>(`/rooms/${encodeURIComponent(id)}/history`, {
+      method: "POST",
+      headers: { "x-csrf-token": csrf },
+      body: JSON.stringify(body),
+    }),
+  restoreSnapshot: (
+    id: string,
+    snapshotId: string,
+    expectedRevision: number,
+    csrf: string,
+  ) =>
+    request<RoomState>(
+      `/rooms/${encodeURIComponent(id)}/history/${encodeURIComponent(snapshotId)}/restore`,
+      {
+        method: "POST",
+        headers: { "x-csrf-token": csrf },
+        body: JSON.stringify({
+          expectedRevision,
+          requestId: crypto.randomUUID(),
+        }),
+      },
+    ),
+  declareStock: (
+    id: string,
+    modelId: string,
+    total: number,
+    expectedRevision: number,
+    csrf: string,
+  ) =>
+    request<RoomState>(`/rooms/${encodeURIComponent(id)}/inventory`, {
+      method: "POST",
+      headers: { "x-csrf-token": csrf },
+      body: JSON.stringify({
+        modelId,
+        total,
+        expectedRevision,
+        requestId: crypto.randomUUID(),
+      }),
     }),
   room: (id: string) => request<RoomState>(`/rooms/${encodeURIComponent(id)}`),
   save: (

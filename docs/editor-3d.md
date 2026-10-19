@@ -4,7 +4,7 @@ Ce document décrit l'architecture cible acceptée pour le POC et ses évolution
 
 ## Objectif et périmètre
 
-L’éditeur doit permettre à un ouvreur de concevoir une zone de bloc sur laptop : construire des pans, ajouter des volumes, placer des prises par clic répété, composer des blocs et sauvegarder son travail. La conception reste possible sans posséder les éléments utilisés. Les vérifications de stock interviennent dans le parcours de réservation, distinct du calcul géométrique.
+L’éditeur doit permettre à un ouvreur de concevoir une zone de bloc sur laptop : construire des pans, ajouter des volumes, placer des prises par clic répété, composer des voies et sauvegarder son travail. Depuis la recette, l’interface bloque les ajouts sans stock disponible. La conception ne consomme aucun exemplaire physique ; seule la réservation confirme la disponibilité face aux autres ouvreurs.
 
 L’ordre de construction V1 est **mur → volume → prises**, avec également des prises directement sur le mur. Un volume ne peut être placé que sur un mur. L’abstraction de support permettra d’étudier plus tard d’autres relations, mais cette généralité n’autorise aucun empilement en V1.
 

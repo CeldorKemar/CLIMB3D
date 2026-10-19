@@ -4,8 +4,10 @@ import {
 } from '@climbed/contracts';
 import {
   BoxGeometry, BufferGeometry, Euler, ExtrudeGeometry, Float32BufferAttribute,
-  Path, Quaternion, Shape, Triangle, Vector3,
+  Matrix4, Path, Quaternion, Shape, Triangle, Vector3,
 } from 'three';
+import { detectSolidContacts, type CollisionPair, type CollisionSolid } from './collisions';
+export { COLLISION_EPSILON, type CollisionPair } from './collisions';
 
 /** Numerical tolerance in metres; this is not a mechanical clearance. */
 export const SURFACE_EPSILON = 0.0001;
@@ -27,6 +29,43 @@ export function getWallAngles(rotation: Quat): { inclination: number; yaw: numbe
   const up = new Vector3(0, 1, 0).applyQuaternion(q)
     .applyQuaternion(new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -yaw));
   return { inclination: Math.atan2(up.z, up.y) / DEG, yaw: yaw / DEG };
+}
+
+export interface WallChainOptions {
+  origin: Vec3;
+  width: number;
+  thickness: number;
+  yaw?: number;
+  segments: { length: number; inclination: number }[];
+  color: string;
+  fixingSpacing: number;
+  name?: string;
+  idPrefix?: string;
+  angleMode?: 'absolute' | 'relative';
+}
+
+/** Connect equal-width pans edge-to-edge. Length is measured along each pan, never its projection. */
+export function createWallChain(options: WallChainOptions): WallDefinition[] {
+  let base = new Vector3(...options.origin), angle = 0;
+  return options.segments.map((segment, index) => {
+    if (!Number.isFinite(segment.length) || segment.length <= 0 || !Number.isFinite(segment.inclination)) {
+      throw new Error('Longueur ou inclinaison de pan invalide');
+    }
+    angle = options.angleMode === 'relative' ? angle + segment.inclination : segment.inclination;
+    const rotation = quaternionFromWallAngles(angle, options.yaw ?? 0);
+    const wall: WallDefinition = {
+      id: `${options.idPrefix ?? 'chain'}-${index + 1}`, name: `${options.name ?? 'Pan'} ${index + 1}`,
+      width: options.width, height: segment.length, thickness: options.thickness,
+      position: tuple(base), rotation, color: options.color, fixingSpacing: options.fixingSpacing, openings: [],
+    };
+    base = new Vector3(0, segment.length, 0).applyQuaternion(new Quaternion(...rotation)).add(base);
+    return wall;
+  });
+}
+
+export function wallProjectedDimensions(wall: WallDefinition): { length: number; verticalHeight: number; horizontalDepth: number } {
+  const delta = new Vector3(0, wall.height, 0).applyQuaternion(new Quaternion(...wall.rotation));
+  return { length: wall.height, verticalHeight: Math.abs(delta.y), horizontalDepth: Math.hypot(delta.x, delta.z) };
 }
 
 function wallErrors(wall: WallDefinition): string[] {
@@ -216,10 +255,18 @@ export function createModelGeometry(model: ModelDefinition): BufferGeometry {
 export interface WorldPose { position: Vec3; rotation: Quat }
 
 export function getWorldPose(scene: SceneDocument, placementId: string): WorldPose {
+  return createPoseResolver(scene)(placementId);
+}
+
+/** Per-operation maps and memoization, never stale across mutable editor documents. */
+function createPoseResolver(scene: SceneDocument): (id: string) => WorldPose {
   const placements = new Map(scene.placements.map(p => [p.id, p]));
   const walls = new Map(scene.walls.map(w => [w.id, w]));
   const visited = new Set<string>();
+  const poses = new Map<string, WorldPose>();
   function resolve(id: string): WorldPose {
+    const cached = poses.get(id);
+    if (cached) return cached;
     if (visited.has(id)) throw new Error(`Cycle de supports : ${id}`);
     const placement = placements.get(id);
     if (!placement) throw new Error(`Placement introuvable : ${id}`);
@@ -234,9 +281,11 @@ export function getWorldPose(scene: SceneDocument, placementId: string): WorldPo
     const position = new Vector3(...placement.position).applyQuaternion(q).add(new Vector3(...parent.position));
     const rotation = q.multiply(new Quaternion(...placement.rotation));
     visited.delete(id);
-    return { position: tuple(position), rotation: quatTuple(rotation) };
+    const pose = { position: tuple(position), rotation: quatTuple(rotation) };
+    poses.set(id, pose);
+    return pose;
   }
-  return resolve(placementId);
+  return resolve;
 }
 
 /** Surface test independent of the rendering scene. Ignores the back mounting face. */
@@ -264,7 +313,7 @@ export function isPointOnModelSurface(model: ModelDefinition, point: Vec3, rotat
   } finally { geometry.dispose(); }
 }
 
-export function validateScene(scene: SceneDocument): string[] {
+export function validateScene(scene: SceneDocument, options: { collisions?: boolean } = {}): string[] {
   const parsed = sceneSchema.safeParse(scene);
   if (!parsed.success) return parsed.error.issues.map(issue => `${issue.path.join('.')} : ${issue.message}`);
   const errors: string[] = [];
@@ -276,6 +325,7 @@ export function validateScene(scene: SceneDocument): string[] {
   const walls = new Map(scene.walls.map(w => [w.id, w]));
   const models = new Map(scene.models.map(m => [m.id, m]));
   const placements = new Map(scene.placements.map(p => [p.id, p]));
+  const resolvePose = createPoseResolver(scene);
   for (const wall of scene.walls) errors.push(...wallErrors(wall));
   for (const placement of scene.placements) {
     const model = models.get(placement.modelId);
@@ -301,7 +351,7 @@ export function validateScene(scene: SceneDocument): string[] {
         }
       }
     }
-    try { getWorldPose(scene, placement.id); } catch (error) { errors.push((error as Error).message); }
+    try { resolvePose(placement.id); } catch (error) { errors.push((error as Error).message); }
   }
   for (const boulder of scene.boulders) {
     const ids = new Set(boulder.placementIds);
@@ -309,14 +359,158 @@ export function validateScene(scene: SceneDocument): string[] {
     for (const id of boulder.placementIds) {
       const placement = placements.get(id);
       if (!placement) errors.push(`Prise du bloc introuvable : ${id}`);
-      else if (models.get(placement.modelId)?.kind !== 'hold') errors.push(`Le bloc référence un volume : ${id}`);
     }
     for (const id of [...boulder.startIds, ...boulder.finishIds]) {
       if (!ids.has(id)) errors.push(`Départ ou arrivée absent du bloc : ${id}`);
+      const placement = placements.get(id);
+      if (placement && models.get(placement.modelId)?.kind !== 'hold') errors.push(`Départ ou arrivée doit être une prise : ${id}`);
     }
     if (new Set(boulder.startIds).size !== boulder.startIds.length || new Set(boulder.finishIds).size !== boulder.finishIds.length) {
       errors.push(`Départ ou arrivée dupliqué : ${boulder.id}`);
     }
   }
+  if (!errors.length && options.collisions !== false) {
+    errors.push(...footprintErrors(scene));
+    errors.push(...findSceneCollisions(scene).map(pair => `Collision entre ${pair.firstId} et ${pair.secondId}`));
+  }
   return [...new Set(errors)];
+}
+
+function poseMatrix(pose: WorldPose): Matrix4 {
+  return new Matrix4().compose(new Vector3(...pose.position), new Quaternion(...pose.rotation), new Vector3(1, 1, 1));
+}
+
+/** Contacts of pieces in world coordinates, including pieces on different pans and non-supporting walls. */
+export function findSceneCollisions(scene: SceneDocument): CollisionPair[] {
+  const models = new Map(scene.models.map(model => [model.id, model]));
+  const geometryByModel = new Map<string, BufferGeometry>();
+  const wallIds = new Set(scene.walls.map(wall => wall.id));
+  const solids: CollisionSolid[] = [];
+  const resolvePose = createPoseResolver(scene);
+  try {
+    for (const wall of scene.walls) {
+      solids.push({ id: wall.id, geometry: createWallGeometry(wall), matrix: poseMatrix(wall), exemptIds: wallIds });
+    }
+    for (const placement of scene.placements) {
+      const model = models.get(placement.modelId);
+      if (!model) continue;
+      let geometry = geometryByModel.get(model.id);
+      if (!geometry) { geometry = createModelGeometry(model); geometryByModel.set(model.id, geometry); }
+      solids.push({ id: placement.id, geometry, matrix: poseMatrix(resolvePose(placement.id)), exemptIds: new Set([placement.parentId]) });
+    }
+    return detectSolidContacts(solids);
+  } finally {
+    for (const geometry of new Set(solids.map(solid => solid.geometry))) geometry.dispose();
+  }
+}
+
+type Point2 = { x: number; y: number };
+const cross2 = (a: Point2, b: Point2, c: Point2) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+function convexHull(points: Point2[]): Point2[] {
+  const sorted = [...new Map(points.map(p => [`${p.x.toFixed(9)},${p.y.toFixed(9)}`, p])).values()]
+    .sort((a, b) => a.x - b.x || a.y - b.y);
+  const lower: Point2[] = [], upper: Point2[] = [];
+  for (const point of sorted) {
+    while (lower.length >= 2 && cross2(lower[lower.length - 2]!, lower[lower.length - 1]!, point) <= 0) lower.pop();
+    lower.push(point);
+  }
+  for (const point of [...sorted].reverse()) {
+    while (upper.length >= 2 && cross2(upper[upper.length - 2]!, upper[upper.length - 1]!, point) <= 0) upper.pop();
+    upper.push(point);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+function polygonsOverlap(a: Point2[], b: Point2[]): boolean {
+  for (const polygon of [a, b]) for (let i = 0; i < polygon.length; i++) {
+    const p = polygon[i]!, q = polygon[(i + 1) % polygon.length]!;
+    const axis = { x: -(q.y - p.y), y: q.x - p.x };
+    const length = Math.hypot(axis.x, axis.y);
+    const project = (v: Point2) => (v.x * axis.x + v.y * axis.y) / length;
+    const ap = a.map(project), bp = b.map(project);
+    if (Math.max(...ap) < Math.min(...bp) - SURFACE_EPSILON || Math.max(...bp) < Math.min(...ap) - SURFACE_EPSILON) return false;
+  }
+  return true;
+}
+
+// Cache only immutable local contours, not placements, meshes or caller-owned model objects.
+// The bound prevents an editing session with many dimension changes from retaining every version.
+const localFootprints = new Map<string, readonly Point2[]>();
+function localMountingFootprint(model: ModelDefinition): readonly Point2[] {
+  const key = JSON.stringify([model.shape, model.dimensions]);
+  const cached = localFootprints.get(key);
+  if (cached) return cached;
+  const geometry = createModelGeometry(model);
+  let hull: Point2[];
+  try {
+    const attr = geometry.getAttribute('position');
+    const points: Point2[] = [];
+    for (let i = 0; i < attr.count; i++) {
+      if (Math.abs(attr.getZ(i)) <= SURFACE_EPSILON) points.push({ x: attr.getX(i), y: attr.getY(i) });
+    }
+    hull = convexHull(points);
+  } finally { geometry.dispose(); }
+  if (localFootprints.size >= 300) localFootprints.delete(localFootprints.keys().next().value!);
+  localFootprints.set(key, hull);
+  return hull;
+}
+
+/** Tests the actual convex mounting footprint, rather than a bounding rectangle or sphere. */
+export function isMountingFootprintOnWall(wall: WallDefinition, model: ModelDefinition, placement: Pick<Placement, 'position' | 'rotation'>): boolean {
+    const q = new Quaternion(...placement.rotation);
+    // A rigid transform preserves the contour order; no hull rebuild is needed per occurrence.
+    const hull = localMountingFootprint(model).map(point => {
+      const v = new Vector3(point.x, point.y, 0).applyQuaternion(q);
+      return { x: v.x + placement.position[0], y: v.y + placement.position[1] };
+    });
+    if (hull.length < 3 || hull.some(p => p.x < -wall.width / 2 - SURFACE_EPSILON || p.x > wall.width / 2 + SURFACE_EPSILON || p.y < -SURFACE_EPSILON || p.y > wall.height + SURFACE_EPSILON)) return false;
+    for (const o of wall.openings) {
+      const rectangle = [
+        { x: o.x - o.width / 2, y: o.y - o.height / 2 }, { x: o.x + o.width / 2, y: o.y - o.height / 2 },
+        { x: o.x + o.width / 2, y: o.y + o.height / 2 }, { x: o.x - o.width / 2, y: o.y + o.height / 2 },
+      ];
+      if (polygonsOverlap(hull, rectangle)) return false;
+    }
+    return true;
+}
+
+function footprintErrors(scene: SceneDocument): string[] {
+  const errors: string[] = [];
+  const walls = new Map(scene.walls.map(wall => [wall.id, wall]));
+  const models = new Map(scene.models.map(model => [model.id, model]));
+  for (const placement of scene.placements) {
+    if (placement.parentType !== 'wall') continue;
+    const wall = walls.get(placement.parentId), model = models.get(placement.modelId);
+    if (wall && model && !isMountingFootprintOnWall(wall, model, placement)) errors.push(`Empreinte hors du pan ou sur une ouverture : ${placement.id}`);
+  }
+  return errors;
+}
+
+function solidFingerprint(scene: SceneDocument, id: string): string {
+  const wall = scene.walls.find(w => w.id === id);
+  if (wall) return JSON.stringify([wall.width, wall.height, wall.thickness, wall.openings, wall.position, wall.rotation]);
+  const placement = scene.placements.find(p => p.id === id);
+  const model = placement && scene.models.find(m => m.id === placement.modelId);
+  return JSON.stringify([model?.shape, model?.dimensions, placement && getWorldPose(scene, id)]);
+}
+
+/** Legacy contacts may survive unchanged. A changed colliding object must resolve its contact. */
+export function validateSceneChange(previous: SceneDocument, next: SceneDocument): string[] {
+  const errors = validateScene(next, { collisions: false });
+  if (errors.length) return errors;
+  const key = (pair: CollisionPair) => JSON.stringify([pair.firstId, pair.secondId]);
+  const oldPairs = new Set(findSceneCollisions(previous).map(key));
+  for (const pair of findSceneCollisions(next)) {
+    if (!oldPairs.has(key(pair)) || solidFingerprint(previous, pair.firstId) !== solidFingerprint(next, pair.firstId) ||
+        solidFingerprint(previous, pair.secondId) !== solidFingerprint(next, pair.secondId)) {
+      errors.push(`Collision entre ${pair.firstId} et ${pair.secondId}`);
+    }
+  }
+  const oldFootprints = new Set(footprintErrors(previous));
+  for (const error of footprintErrors(next)) {
+    const id = error.slice(error.lastIndexOf(' : ') + 3);
+    const p = next.placements.find(placement => placement.id === id);
+    if (!oldFootprints.has(error) || solidFingerprint(previous, id) !== solidFingerprint(next, id) ||
+        (p && solidFingerprint(previous, p.parentId) !== solidFingerprint(next, p.parentId))) errors.push(error);
+  }
+  return errors;
 }

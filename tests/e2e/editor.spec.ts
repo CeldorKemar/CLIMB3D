@@ -1,22 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { apiBase, csrf, login, password, releaseOwnReservation, room, save } from './helpers';
-
-async function enterWorkshop(page: Page) {
-  await page.goto('/');
-  await page.getByLabel('Adresse e-mail').fill('alice@climbed.local');
-  await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Entrer dans l’atelier' }).click();
-  await expect(page.getByTestId('editor-canvas').locator('canvas')).toBeVisible();
-  await page.getByTestId('view-front').click();
-  await expect(page.getByTestId('view-front')).toHaveClass(/active/);
-}
-
-async function confirmSave(page: Page) {
-  const saved = page.waitForResponse(value => value.url().includes('/scene') && value.request().method() === 'PUT');
-  await page.getByTestId('scene-save').click();
-  const response = await saved;
-  expect(response.ok(), await response.text()).toBeTruthy();
-}
+import { test, expect } from '@playwright/test';
+import { apiBase, csrf, login, enterWorkshop, confirmSave, releaseOwnReservation, room, save } from './helpers';
 
 test('vrais placements WebGL, rotation locale, annuler/rétablir et sauvegarde après rechargement', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
@@ -158,13 +141,13 @@ test('une action de stock ne permet pas d’écraser une sauvegarde concurrente 
     const remoteScene = structuredClone(prepared.scene);
     remoteScene.name = 'Projet modifié à distance par un autre ouvreur';
     const remote = await save(actor, remoteScene, roomId);
-    await page.getByRole('button', { name: 'Stock & suivi', exact: true }).click();
+    await page.getByTestId('nav-stock').click();
     const withdrew = page.waitForResponse(value => value.url().endsWith(`/reservations/${reservationId}/actions`) && value.request().method() === 'POST');
     await page.getByRole('button', { name: 'Pièces récupérées', exact: true }).click();
     expect((await withdrew).ok()).toBeTruthy();
     expect((await room(actor, roomId)).reservations.find(value => value.id === reservationId)?.state).toBe('taken');
 
-    await page.getByRole('button', { name: 'Propriétés', exact: true }).click();
+    await page.getByTestId('nav-design').click();
     await page.getByTestId(`scene-item-${scene.walls[0]!.id}`).click();
     await page.getByTestId('wall-width').fill('4.5');
     await page.getByTestId('wall-width').blur();

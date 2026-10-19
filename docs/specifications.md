@@ -48,7 +48,7 @@ Le POC inclut les bases d’annulation/rétablissement, les sauvegardes et le re
 
 ## Conception et matériel physique
 
-La conception est entièrement théorique tant qu’aucune réservation n’est demandée. Un modèle absent du stock peut être utilisé. Dix variantes de murs peuvent réutiliser le même modèle sans consommer dix exemplaires physiques.
+La conception ne réserve aucun matériel tant qu’aucun check-in n’est demandé. **La recette du POC a changé la règle d’ajout :** la bibliothèque affiche le stock disponible et bloque l’ajout d’une pièce indisponible, en tenant compte des besoins déjà dessinés et des pièces affectées réutilisables. Plusieurs sauvegardes alternatives ne constituent toujours pas des réservations physiques. L’API de réservation reste l’autorité face aux opérations concurrentes.
 
 Le check-in réserve les pièces disponibles pour un projet et un ouvreur. La confirmation d’installation constitue une action distincte. Plusieurs ouvreurs doivent pouvoir travailler sans se réserver la même pièce.
 
@@ -65,6 +65,19 @@ Une version projetée et une version installée peuvent coexister. Modifier le p
 - Un volume est fixé sur un mur ; volume sur volume exclu du POC, mais évolution à préserver.
 - La photo fournie sert de référence visuelle de complexité, pas de relevé métrique ou de reconstruction automatique.
 - Les dimensions, dispositions de trous et compatibilités propres aux fabricants restent à documenter. Aucune valeur présentée comme norme n’est validée à ce stade.
+
+## Corrections demandées après la recette du premier POC
+
+- Refuser les contacts et intersections entre pièces distinctes, y compris après déplacement ou rotation. Le contact d’une prise avec son propre support demeure nécessaire et autorisé. La géométrie des pièces, y compris les cavités, fait foi ; une boîte englobante sert seulement à accélérer les contrôles.
+- Afficher la longueur du pan et ses projections verticale et horizontale : sur un toit horizontal, la longueur correspond à sa profondeur. Un assistant doit raccorder les segments d’un même mur, par exemple trois segments de 1 m à 0°, 30° puis 0° d’inclinaison absolue.
+- Garder la construction des pans dans la salle. Créer et renseigner les modèles achetés dans un éditeur de catalogue séparé, avec une première modélisation paramétrique sommaire. Les dimensions d’une pièce ne se personnalisent plus sur une occurrence de la salle. Les modèles déjà utilisés ne doivent pas être transformés rétroactivement.
+- Conserver le brouillon de salle lors du passage vers le catalogue et du retour à la salle. Le changement de vue ne vaut ni sauvegarde ni abandon.
+- Créer des voies, associer prises **et volumes** à plusieurs voies, et filtrer réellement leur visibilité par cases à cocher. Les supports nécessaires aux objets visibles restent affichés.
+- Afficher les quantités dans la bibliothèque, griser les modèles sans disponibilité et regrouper la navigation du stock sur le bouton latéral. La déclaration d’un inventaire physique est explicite et réservée aux responsables autorisés.
+- Sauvegarder des états nommés d’une salle entière ou d’une voie. Restaurer une voie doit conserver les autres voies et leurs pièces partagées ; une incompatibilité d’une ressource partagée, une collision, une révision obsolète ou un manque de stock entraîne un refus sans effet partiel. Une restauration crée une nouvelle révision de conception et ne réécrit pas les occupations physiques.
+- Conserver les scènes anciennes à l’ouverture : signaler leurs éventuels contacts existants et permettre leur correction, sans modifier les données silencieusement. Les nouveaux contacts restent interdits et une restauration exige une géométrie entièrement valide.
+
+La recherche de fiches fabricant et de forums a été renouvelée. Les refus réseau et les informations encore inconnues sont consignés dans [research.md](research.md). Les valeurs saisies ou génériques ne deviennent pas des spécifications fournisseur par défaut.
 
 ## V2 et exclusions
 

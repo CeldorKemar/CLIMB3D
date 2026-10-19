@@ -5,12 +5,12 @@ import { applyCommand, commitScene, createHistory, undoHistory, redoHistory } fr
 describe('commandes de conception réversibles', () => {
   it('retrouve les versions complètes et invalide la branche redo après une nouvelle édition', () => {
     const initial = createDemoScene();
-    const first = applyCommand(initial, { type: 'patch-wall', id: 'wall-main', patch: { width: 6 } });
+    const first = applyCommand(initial, { type: 'patch-wall', id: 'wall-main', patch: { width: 4.9 } });
     const history = commitScene(createHistory(initial), first);
     const back = undoHistory(history);
     expect(back.present).toEqual(initial);
     expect(redoHistory(back).present).toEqual(first);
-    const replacement = applyCommand(back.present, { type: 'patch-wall', id: 'wall-main', patch: { width: 7 } });
+    const replacement = applyCommand(back.present, { type: 'patch-wall', id: 'wall-main', patch: { width: 4.8 } });
     expect(commitScene(back, replacement).future).toHaveLength(0);
     expect(initial.walls[0]?.width).toBe(5);
   });
@@ -40,5 +40,25 @@ describe('commandes de conception réversibles', () => {
     scene.name = 'Mutation extérieure';
     expect(state.present.name).toBe('Atelier de bloc');
     expect(Object.keys(state)).toEqual(['past', 'present', 'future']);
+  });
+
+  it('ouvre un ancien contact sans le réécrire et autorise sa correction sans accepter de nouvelle collision', () => {
+    const scene = createDemoScene();
+    scene.placements = [
+      { id: 'old-a', modelId: 'volume-box', modelVersion: 1, parentType: 'wall', parentId: 'wall-main', position: [-1, 1, 0], rotation: [0, 0, 0, 1] },
+      { id: 'old-b', modelId: 'volume-box', modelVersion: 1, parentType: 'wall', parentId: 'wall-main', position: [-1, 1, 0], rotation: [0, 0, 0, 1] },
+    ];
+    scene.boulders = [];
+    const opened = createHistory(scene);
+    expect(opened.present).toEqual(scene);
+    const rename = structuredClone(scene);
+    rename.name = 'Ancien projet conservé';
+    const renamed = commitScene(opened, rename);
+    expect(renamed.present.placements).toEqual(scene.placements);
+    const corrected = applyCommand(renamed.present, { type: 'patch-placement', id: 'old-b', patch: { position: [1, 1, 0] } });
+    const valid = commitScene(renamed, corrected);
+    expect(valid.present.placements[1]?.position).toEqual([1, 1, 0]);
+    expect(() => commitScene(valid, rename)).toThrow();
+    expect(() => applyCommand(opened.present, { type: 'patch-placement', id: 'old-b', patch: { position: [-0.9, 1, 0] } })).toThrow();
   });
 });

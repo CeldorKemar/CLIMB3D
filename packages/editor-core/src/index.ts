@@ -1,5 +1,5 @@
 import { sceneSchema, type SceneDocument, type WallDefinition, type Placement, type BoulderDefinition, type ModelDefinition } from '@climbed/contracts';
-import { validateScene } from '@climbed/geometry';
+import { validateScene, validateSceneChange } from '@climbed/geometry';
 
 export interface EditorHistory {
   past: SceneDocument[];
@@ -28,21 +28,28 @@ export class InvalidSceneError extends Error {
   }
 }
 
-export function assertValidScene(scene: SceneDocument): void {
+export function assertValidScene(scene: SceneDocument, options: { collisions?: boolean } = {}): void {
   const parsed = sceneSchema.safeParse(scene);
   if (!parsed.success) throw new InvalidSceneError(parsed.error.issues.map(issue => `${issue.path.join('.')} : ${issue.message}`));
-  const problems = validateScene(parsed.data);
+  const problems = validateScene(parsed.data, options);
+  if (problems.length) throw new InvalidSceneError(problems);
+}
+
+export function assertValidSceneChange(previous: SceneDocument, next: SceneDocument): void {
+  const problems = validateSceneChange(previous, next);
   if (problems.length) throw new InvalidSceneError(problems);
 }
 
 /** Local editing only. These functions never execute reservations or rewrite installed state. */
 export function createHistory(scene: SceneDocument): EditorHistory {
-  assertValidScene(scene);
+  // Older documents may predate collision checks. Opening must preserve them;
+  // subsequent edits may resolve their contacts but cannot introduce new ones.
+  assertValidScene(scene, { collisions: false });
   return { past: [], present: structuredClone(scene), future: [] };
 }
 
 export function commitScene(history: EditorHistory, next: SceneDocument): EditorHistory {
-  assertValidScene(next);
+  assertValidSceneChange(history.present, next);
   if (JSON.stringify(history.present) === JSON.stringify(next)) return history;
   return { past: [...history.past.slice(-79), history.present], present: structuredClone(next), future: [] };
 }
@@ -104,6 +111,6 @@ export function applyCommand(source: SceneDocument, command: EditorCommand): Sce
     case 'patch-boulder': Object.assign(required(scene.boulders, command.id), command.patch); break;
     case 'remove-boulder': required(scene.boulders, command.id); scene.boulders = scene.boulders.filter(b => b.id !== command.id); break;
   }
-  assertValidScene(scene);
+  assertValidSceneChange(source, scene);
   return scene;
 }
