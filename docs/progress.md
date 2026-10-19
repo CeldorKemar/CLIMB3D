@@ -47,7 +47,7 @@ Après validation de l’architecture : créer le socle exécutable et un premie
 
 ## Phase 2 — POC exécutable
 
-**État : implémenté ; vérification finale et démonstration en cours.**
+**État : livré et vérifié sur l'instance actuelle ; validation utilisateur attendue.**
 
 ### Réalisation
 
@@ -69,7 +69,13 @@ Après validation de l’architecture : créer le socle exécutable et un premie
 - `npm run build` : tous les typechecks de workspaces et build web réussis.
 - `npm test` : **41 tests réussis**, aucun échec ni skip sur l'instance préparée : 16 géométrie, 4 commandes/historique, 6 planification pure et 15 intégrations sur PostgreSQL réel dans une base dédiée.
 - `GET /api/v1/health` : réponse 200 après requête SQL réelle ; `GET /` : interface compilée servie par le processus API sans Vite.
-- Campagne Playwright finale sur la version compilée et vérification du conteneur : résultats à ajouter après achèvement.
+- Campagne Playwright finale sur l'interface compilée servie par l'API : **8 tests réussis en 48,7 s**, dont cinq API HTTP et trois parcours navigateur WebGL. Le cas de révision concurrente vérifie que l'action de stock ne permet pas d'écraser le travail d'un autre ouvreur.
+- Contrôle fonctionnel ponctuel d'une scène de **20 pans, 30 volumes et 500 prises** : sauvegarde, chargement et rendu WebGL réussis sans erreur JavaScript ; données de la salle fictive restaurées ensuite. Ce contrôle utilise le rendu logiciel de Chromium et ne mesure pas la fluidité d'un laptop.
+- Capture réelle de la scène de démonstration conservée dans docs/assets/poc-editor.png : trois pans, cinq volumes, trente-trois prises.
+- Image Docker finale construite et démarrée en mode production avec une base PostgreSQL de contrôle séparée, sans données de démo. Migrations, santé SQL HTTP 200, interface HTML, asset JavaScript HTTP 200 et refus HTTP 401 sans session validés. Utilisateur système `node`, non privilégié. Le conteneur de contrôle a ensuite été arrêté et supprimé ; la base de développement et ses données ont été conservées.
+- La garde de production a été vérifiée : connecter l'image à la base fictive de développement contenant les comptes de démonstration refuse le démarrage.
+- Un premier démarrage de conteneur avait révélé l'absence du tsconfig racine dans l'image d'exécution ; la copie de ce fichier a été ajoutée puis le démarrage revalidé. Les couches de dépendances sont séparées des sources pour réutiliser les installations vérifiées lors des changements de code. Le problème DNS propre à BuildKit et le certificat proxy de préparation sont décrits dans hosting.md ; TLS et empreintes npm sont restés vérifiés.
+- Instructions cloud `install_script` et `start_skill` enregistrées dans un brouillon. Ces instructions ont été exercées sur l'instance actuelle ; l'enregistrement ne vaut ni application, ni publication, ni validation dans une nouvelle tâche.
 
 Des essais intermédiaires ont révélé et permis de corriger : un décalage visuel introduit dans les ancres persistées ; la confusion entre révision du brouillon et version renvoyée par une opération de stock ; des fixtures de tests devenues invalides après enrichissement de la scène de démo. Une campagne a aussi été interrompue par les rechargements automatiques de développement : la finale utilise la version compilée sans watch.
 
@@ -88,3 +94,5 @@ Des essais intermédiaires ont révélé et permis de corriger : un décalage vi
 ### Prochaine validation
 
 Faire essayer les gestes de conception et le parcours de réservation au porteur du projet avant une nouvelle phase importante. Les priorités de la suite seront décidées à partir de cette recette, notamment l'ergonomie 3D, les formes de pans et le catalogue client. Le POC local ne doit pas être présenté comme un SaaS prêt à commercialiser.
+
+Points de retour locaux : `f545ab7` pour le cadrage/architecture documentaire et `c5bbaad` pour le premier POC. Un commit complémentaire conserve la correction et la validation du conteneur. Aucun push GitHub, hébergement public ou publication de l'environnement n'a été effectué. Les champs cloud install_script et start_skill sont enregistrés pour revue ; leur publication reste une action de l'utilisateur dans les paramètres de l'environnement.

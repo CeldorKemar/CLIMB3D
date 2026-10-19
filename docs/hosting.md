@@ -14,6 +14,10 @@ Cette organisation peut être exploitée sur des offres de conteneurs/PaaS d'hé
 
 Les sauvegardes, mises à jour PostgreSQL et certificats HTTPS devront autant que possible être gérés par le fournisseur. Le Dockerfile garde une sortie standard indépendante d'une API d'hébergement propriétaire. Aucun Kubernetes, service Redis, file de messages ou moteur de recherche indépendant n'est requis par le POC.
 
+La construction standard est `docker build -t climbed:poc .`. L'image sert l'interface compilée et l'API, utilise un compte système sans privilèges et reçoit `DATABASE_URL` par la configuration de l'hébergeur. Elle respecte `PORT` si l'hébergeur le fournit. Les migrations passent par une étape de déploiement distincte, `npm run db:migrate`, avant le démarrage ; aucune base n'est réinitialisée et aucun compte fictif n'est créé automatiquement.
+
+Dans l'environnement cloud de préparation, BuildKit ne parvenait pas à résoudre le nom du proxy fourni. La construction a utilisé une correspondance temporaire `--add-host` obtenue par la résolution de ce même proxy sur l'hôte. Les arguments proxy standards ont été conservés et le certificat de confiance de la plateforme a été transmis par secret BuildKit `climbed_ca`, sans être copié dans l'image. Cette correction est propre au réseau de préparation : aucune IP de proxy n'est figée dans le dépôt, aucune règle d'accès n'a été contournée et la vérification TLS/SRI est restée active. Un hébergeur sans ce proxy n'a pas besoin de ce certificat.
+
 Pour un vrai pilote externe, il reste à mettre en place et tester : domaine/HTTPS, comptes réels et procédure de récupération, email, révocation des comptes fictifs, sauvegardes/restauration, surveillance et politique d'accès au support. Un conteneur fonctionnel ne vaut pas validation de production.
 
 ## Paiement futur
