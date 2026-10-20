@@ -24,7 +24,9 @@ export function getMountingMethod(model: ModelDefinition): 'bolt' | 'screw' {
 }
 
 export function getSupportFixings(support: WallDefinition | ModelDefinition): SupportFixings {
-  if (support.supportFixings) return structuredClone(support.supportFixings);
+  if (support.supportFixings) return { ...structuredClone(support.supportFixings), holes: [
+    ...structuredClone(support.supportFixings.holes), ...('width' in support ? structuredClone(support.preparedPilotHoles ?? []) : []),
+  ] };
   if ('width' in support) {
     const holes: SupportFixingHole[] = [];
     const appendGrid = (grid: WallDefinition['fixingGrid'], kind: 'insert' | 'pilot') => {
@@ -46,7 +48,7 @@ export function getSupportFixings(support: WallDefinition | ModelDefinition): Su
     };
     appendGrid(support.fixingGrid, 'insert');
     if (support.pilotGrid) appendGrid(support.pilotGrid, 'pilot');
-    return { allowScrews: true, holes };
+    return { allowScrews: true, holes: [...holes, ...structuredClone(support.preparedPilotHoles ?? [])] };
   }
   // A single explicitly synthetic front insert on the demonstration box; other volume
   // faces are screw-capable example material, without invented receiving inserts.
@@ -54,10 +56,16 @@ export function getSupportFixings(support: WallDefinition | ModelDefinition): Su
     ? [{ id: 'example-front-insert', position: [0, 0, support.dimensions[2]], normal: [0, 0, 1] }]
     : [] };
 }
-function supportFor(scene: SceneDocument, placement: Placement): WallDefinition | ModelDefinition | undefined {
+export function getPlacementModel(scene: SceneDocument, placement: Placement): ModelDefinition | undefined {
+  const model = scene.models.find(m => m.id === placement.modelId);
+  if (!model || !placement.preparedPilotHoles?.length) return model;
+  const support = getSupportFixings(model);
+  return { ...model, supportFixings: { ...support, holes: [...support.holes, ...structuredClone(placement.preparedPilotHoles)] } };
+}
+export function supportFor(scene: SceneDocument, placement: Placement): WallDefinition | ModelDefinition | undefined {
   if (placement.parentType === 'wall') return scene.walls.find(w => w.id === placement.parentId);
   const parent = scene.placements.find(p => p.id === placement.parentId);
-  return parent && scene.models.find(m => m.id === parent.modelId);
+  return parent && getPlacementModel(scene, parent);
 }
 function mountedPoint(placement: Placement, hole: MountingHole): Vector3 {
   return new Vector3(...hole.position).applyQuaternion(new Quaternion(...placement.rotation)).add(new Vector3(...placement.position));
@@ -115,13 +123,20 @@ export function snapPlacementToFixing(scene: SceneDocument, placement: Placement
   const model = scene.models.find(m => m.id === placement.modelId);
   if (!model) return undefined;
   if (getMountingMethod(model) === 'screw' && model.mounting?.screwPlacement === 'direct') return validatePlacementMounting(scene, placement).length ? undefined : structuredClone(placement);
+  const next = snapPlacementAnchorToFixing(scene, placement, maxDistance);
+  return next && !validatePlacementMounting(scene, next).length ? next : undefined;
+}
+/** Anchor-only alignment for an explicit support-preparation operation. */
+export function snapPlacementAnchorToFixing(scene: SceneDocument, placement: Placement, maxDistance = .06): Placement | undefined {
+  const model = scene.models.find(m => m.id === placement.modelId);
+  if (!model) return undefined;
   const own = getMountingHoles(model).find(hole => hole.role === 'primary'), nearest = nearestCompatibleHole(scene, placement);
   if (!own || !nearest) return undefined;
   const point = mountedPoint(placement, own), delta = new Vector3(...nearest.position).sub(point);
   if (delta.length() > maxDistance) return undefined;
   const next = structuredClone(placement);
   next.position = new Vector3(...next.position).add(delta).toArray() as Vec3;
-  return validatePlacementMounting(scene, next).length ? undefined : next;
+  return next;
 }
 
 function canonical(value: unknown): unknown {
@@ -131,14 +146,15 @@ function canonical(value: unknown): unknown {
 }
 export function mountingObjectFingerprint(scene: SceneDocument, placement: Placement): string {
   const model = scene.models.find(m => m.id === placement.modelId);
-  return JSON.stringify(canonical([placement, model && [model.kind, model.shape, model.dimensions, model.mounting, model.fixing]]));
+  const anchor = [placement.id, placement.modelId, placement.modelVersion, placement.parentType, placement.parentId, placement.position, placement.rotation];
+  return JSON.stringify(canonical([anchor, model && [model.kind, model.shape, model.dimensions, model.mounting, model.fixing]]));
 }
 export function mountingFingerprint(scene: SceneDocument, placement: Placement): string {
   const support = supportFor(scene, placement);
   // Compare the immutable source parameters, rather than materialising hundreds of
   // insert points for every unchanged piece on each pointer move or save.
   const supportKey = support && ('width' in support
-    ? [support.fixingSpacing, support.fixingGrid, support.pilotGrid, support.fixing, support.supportFixings]
+    ? [support.fixingSpacing, support.fixingGrid, support.pilotGrid, support.fixing, support.supportFixings, support.preparedPilotHoles]
     : [support.kind, support.shape, support.dimensions, support.fixingGrid, support.fixing, support.supportFixings]);
   return JSON.stringify(canonical([mountingObjectFingerprint(scene, placement), supportKey]));
 }

@@ -25,12 +25,15 @@ import type {
   RoomState,
   WallDefinition,
   Vec3,
+  Placement,
 } from "@climbed/contracts";
 import {
   findSceneCollisions,
   quaternionFromWallAngles,
   getRoomLevels,
   translateStructure,
+  prepareSupportForPlacement,
+  requiredPilotHoles,
 } from "@climbed/geometry";
 import { api } from "../api/client";
 import { useEditor } from "../hooks/useEditor";
@@ -84,6 +87,8 @@ export function Workspace({
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
   const [moveStep, setMoveStep] = useState(.1);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
+  const [prepareSupport, setPrepareSupport] = useState(false);
+  const [pilotDiameterMm, setPilotDiameterMm] = useState('');
   const [editorView, setEditorView] = useState<"room" | "catalog">("room");
   const [rightTab, setRightTab] = useState<
     "design" | "stock" | "history" | "levels"
@@ -421,12 +426,15 @@ export function Workspace({
     }
     const id = crypto.randomUUID();
     const accepted = edit((d) => {
-      d.placements.push({
+      const {preparePilotDiameter, ...anchor} = point;
+      const placement: Placement = {
         id,
         modelId: activeModel.id,
         modelVersion: 1,
-        ...point,
-      });
+        ...anchor,
+      };
+      if (preparePilotDiameter !== undefined) Object.assign(d, prepareSupportForPlacement(d,placement,{pilotDiameter:preparePilotDiameter}).scene);
+      d.placements.push(placement);
       const route = d.boulders.find((b) => b.id === activeBoulderId);
       if (route) route.placementIds.push(id);
     });
@@ -669,6 +677,7 @@ export function Workspace({
                 setRightTab("design");
               }}
               onModel={(m) => {
+                setPrepareSupport(false);
                 setSelectedLevelId(null);
                 setActiveModelId(m?.id ?? null);
                 setSelection([]);
@@ -724,6 +733,8 @@ export function Workspace({
                   onPlace={place}
                   hiddenRouteIds={hiddenRouteIds}
                   remainingStock={remaining}
+                  prepareSupport={prepareSupport && !!activeModel && requiredPilotHoles(activeModel).length>0}
+                  pilotDiameter={pilotDiameterMm.trim() ? Number(pilotDiameterMm)/1000 : undefined}
                 />
                 {moveTarget && moveName && !activeModel && <MoveControls name={moveName} step={moveStep} onStep={setMoveStep} onMove={moveStructure} />}
                 <RoomMap
@@ -807,6 +818,8 @@ export function Workspace({
                   <div className="placement-hint">
                     <span className="status-dot" />
                     <strong>{activeModel.name}</strong>
+                    {requiredPilotHoles(activeModel).length>0 && <label><input type="checkbox" aria-label="Préparer les trous pilotes puis placer" checked={prepareSupport} onChange={e=>setPrepareSupport(e.target.checked)}/> Préparer le support puis poser</label>}
+                    {prepareSupport && requiredPilotHoles(activeModel).length>0 && <label>Diamètre pilote (mm) <input type="number" min="1" max="50" step="0.1" aria-label="Diamètre pilote à préparer" value={pilotDiameterMm} onChange={e=>setPilotDiameterMm(e.target.value)}/></label>}
                     <span>
                       {Math.max(0, remaining.get(activeModel.id) ?? 0)} restants
                       · Cliquer pour poser
@@ -872,6 +885,8 @@ export function Workspace({
                   hiddenRouteIds={hiddenRouteIds}
                   setHiddenRouteIds={setHiddenRouteIds}
                   onDuplicate={duplicatePlacement}
+                  pilotDiameterMm={pilotDiameterMm}
+                  setPilotDiameterMm={setPilotDiameterMm}
                 />
               ) : rightTab === "stock" ? (
                 <StockPanel

@@ -213,3 +213,24 @@ Le point de retour avant ce lot est `50086c4`. La livraison reste sur `poc/climb
 - Recherche du nombre minimal de vis et d’un exemple constructeur **incomplète** : huit nouveaux essais bloqués par le proxy HTTPS 403. Aucune notice ou image fournisseur reçue ; aucun montage partiel ni profil constructeur revendiqué. Le détail figure dans fixations.md et research.md. La pyramide fournie reste un exemple pédagogique.
 
 Le point de retour avant ce complément est `6a38270`. La cible de livraison reste `poc/climbed-3d`, sans déploiement externe.
+
+
+## Complément — modes de montage et perçage explicite
+
+### Réalisation
+
+- Le catalogue propose les trois modes pour les prises et volumes : boulons sur inserts, vis sur pilotes, vissage direct. Changer de mode conserve les trous de la pièce.
+- La préparation des pilotes demande une permission du support et un diamètre explicite. Le clic prépare les points manquants et ajoute la pièce dans une seule action annulable ; les pilotes existants sont réutilisés. Un insert ne devient jamais un pilote.
+- Les trous préparés appartiennent au pan ou à l’exemplaire de volume, sans mutation du modèle catalogue. Le rendu et les collisions du volume utilisent un modèle dérivé avec de vrais perçages. Le profil produit peut interdire cette préparation.
+- L’éditeur des trous propres permet ajout, déplacement XY, diamètre, rôle et suppression après saisie d’une référence autorisant la modification du produit. Cette référence reste déclarative. Les modèles en stock ou placés restent verrouillés ; leur variante commence sans stock.
+- Les validations partagées contrôlent autorisation, surface, bords et recouvrements ; l’API ne permet pas de contourner ces règles en envoyant directement du JSON. Aucun mouvement de stock n’est provoqué par une préparation ou une sauvegarde.
+
+### Vérification et limites
+
+- `npm test` : **147/147 réussis**, aucun skip : 75 géométrie/disposition, 27 noyau d’édition, 6 planification et 39 intégrations PostgreSQL réelles. Les ajouts couvrent la préparation atomique, le retour arrière, la réutilisation, les refus géométriques et d’autorisation, l’exemplaire de volume isolé et l’inventaire immuable.
+- `npm run build` : tous les typechecks et compilation réussis. Aucune nouvelle dépendance. Atelier d’environ 1,129 Mo brut, 302 ko gzip ; avertissement de taille Vite conservé.
+- Les notices fabricant restent inaccessibles (HTTP 403). Aucune cote ni autorisation fabricant n’a été ajoutée. La référence saisie par l’utilisateur ne devient pas une provenance fabricant vérifiée. L’édition reste paramétrique dans le plan de montage, sans perçage arbitraire de scans ni validation mécanique.
+- Les trois salles de développement conservent les révisions/placements 51/38, 20/38 et 3/10. Les tests emploient leurs bases dédiées. Les nouveaux champs sont facultatifs ; aucun modèle ni stock existant n’est réécrit et aucune migration SQL n’est nécessaire.
+- Point de retour avant ce lot : `1db682f`. Si une salle a été sauvegardée avec les nouveaux champs, un retour à l’ancien code strict exige aussi de restaurer sa sauvegarde de données antérieure à la mise à jour. Le lecteur actuel accepte les anciens documents ; l’ancien lecteur ne connaît pas les nouveaux champs.
+
+Campagne navigateur finale de ce complément : **41/41 réussis en 3,3 min**, aucun skip, dont 12 parcours HTTP et 29 parcours Chromium avec WebGL. Les 38 scénarios précédents passent avec les trois nouveaux.

@@ -40,7 +40,7 @@ export const fixingGridSchema = z.object({
   rotationDegrees: z.number().finite().optional(),
 }).strict();
 
-/** Positions are metres in the model's mounting plane; holes are supplied by the model, never drilled by the editor. */
+/** Positions are metres in the mounting plane. Changing a product pattern requires its declared authorization. */
 export const mountingHoleSchema = z.object({
   id,
   position: vector3Schema.refine(p => Math.abs(p[2]) < 0.000001, 'Un trou de fixation doit partir du plan de montage z=0'),
@@ -53,6 +53,7 @@ export const mountingSchema = z.object({
   screwPlacement: z.enum(['pre_drilled', 'direct']).optional(),
   holes: z.array(mountingHoleSchema).min(1).max(30),
   threadDesignation: z.string().min(1).max(80).optional(),
+  modificationAuthorization: z.object({ reference: z.string().trim().min(5).max(300) }).strict().optional(),
 }).strict();
 export type ModelMounting = z.infer<typeof mountingSchema>;
 export const supportFixingHoleSchema = z.object({
@@ -66,9 +67,14 @@ export const supportFixingHoleSchema = z.object({
 export type SupportFixingHole = z.infer<typeof supportFixingHoleSchema>;
 export const supportFixingsSchema = z.object({
   allowScrews: z.boolean(),
+  allowDrilling: z.boolean().optional(),
   holes: z.array(supportFixingHoleSchema).max(4000),
 }).strict();
 export type SupportFixings = z.infer<typeof supportFixingsSchema>;
+export const preparedPilotHoleSchema = supportFixingHoleSchema.extend({
+  kind: z.literal('pilot'),
+  diameter: z.number().finite().min(.001).max(.05),
+});
 
 export const modelSchema = z.object({
   id,
@@ -110,6 +116,8 @@ export const wallSchema = z.object({
   fixingGrid: fixingGridSchema.optional(),
   supportFixings: supportFixingsSchema.optional(),
   pilotGrid: fixingGridSchema.optional(),
+  allowPilotDrilling: z.boolean().optional(),
+  preparedPilotHoles: z.array(preparedPilotHoleSchema).max(200).optional(),
   levelId: id.optional(),
 }).strict();
 export type WallDefinition = z.infer<typeof wallSchema>;
@@ -122,6 +130,8 @@ export const placementSchema = z.object({
   parentId: id,
   position: vector3Schema,
   rotation: quaternionSchema,
+  allowPilotDrilling: z.boolean().optional(),
+  preparedPilotHoles: z.array(preparedPilotHoleSchema).max(200).optional(),
 }).strict();
 export type Placement = z.infer<typeof placementSchema>;
 

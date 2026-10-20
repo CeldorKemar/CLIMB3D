@@ -17,11 +17,12 @@ import type {
   Vec3,
 } from "@climbed/contracts";
 import { modelSchema, createMountingExample } from "@climbed/contracts";
-import { getMountingHoles, getMountingMethod } from "@climbed/geometry";
+import { getMountingHoles, getMountingMethod, getSupportFixings } from "@climbed/geometry";
 import type { Edit } from "../domain/editor";
 import { NumberField } from "./Fields";
 import { ShapeThumbnail } from "./LibraryPanel";
 import { ModelPreview } from "./ModelPreview";
+import { MountingHoleEditor } from './MountingHoleEditor';
 import { filterCatalog, shapeLabels as shapeNames } from "../domain/catalog";
 interface Props {
   scene: SceneDocument;
@@ -308,14 +309,28 @@ export function CatalogEditor({
               )}
               <fieldset disabled={locked}>
                 <p className="small-muted">{getMountingHoles(draft).length} fixations obligatoires · {getMountingMethod(draft) === 'bolt' ? 'boulonnage sur inserts' : draft.mounting?.screwPlacement === 'direct' ? 'vissage direct autorisé' : 'vissage sur trous pilotes'}.</p>
-                {getMountingMethod(draft) === 'screw' && <label className="text-field">Placement des vis
-                  <select aria-label="Placement des vis" value={draft.mounting?.screwPlacement ?? 'pre_drilled'} onChange={event => setDraft({ ...draft, mounting: {
-                    ...draft.mounting, method: 'screw', holes: getMountingHoles(draft), screwPlacement: event.target.value as 'direct' | 'pre_drilled',
+                <label className="text-field">Mode de fixation
+                  <select aria-label="Mode de fixation" value={getMountingMethod(draft) === 'bolt' ? 'bolt' : draft.mounting?.screwPlacement ?? 'pre_drilled'} onChange={event => setDraft({ ...draft, mounting: {
+                    ...draft.mounting, method: event.target.value === 'bolt' ? 'bolt' : 'screw', holes: getMountingHoles(draft), screwPlacement: event.target.value === 'direct' ? 'direct' : 'pre_drilled',
                   } })}>
-                    <option value="pre_drilled">Tous les trous alignés sur des trous pilotes</option>
-                    <option value="direct">Vissage direct sur surface autorisée</option>
+                    <option value="bolt">Boulons sur inserts existants</option>
+                    <option value="pre_drilled">Vis sur trous pilotes existants ou à préparer</option>
+                    <option value="direct">Vis directement dans le support autorisé</option>
                   </select>
-                </label>}
+                </label>
+                <p className="small-muted">Le mode conserve les trous prévus sur la pièce. Il s’applique aux prises comme aux volumes ; le support doit autoriser la fixation choisie.</p>
+                {draft.kind === 'volume' && <>
+                  <label className="text-field">Réception de prises vissées
+                    <select aria-label="Réception de prises vissées" value={getSupportFixings(draft).allowScrews ? 'yes' : 'no'} onChange={e => setDraft({...draft, supportFixings:{...getSupportFixings(draft), allowScrews:e.target.value==='yes'}})}>
+                      <option value="no">Vissage interdit sur ce volume</option><option value="yes">Vissage autorisé sur ce volume</option>
+                    </select>
+                  </label>
+                  <label className="text-field">Préperçage du volume support
+                    <select aria-label="Préperçage du volume support" value={getSupportFixings(draft).allowDrilling === undefined ? 'unknown' : getSupportFixings(draft).allowDrilling ? 'allowed' : 'forbidden'} onChange={e => setDraft({...draft, supportFixings:{...getSupportFixings(draft), allowDrilling:e.target.value==='unknown'?undefined:e.target.value==='allowed'}})}>
+                      <option value="unknown">À renseigner pour l’exemplaire du projet</option><option value="allowed">Autorisé par le profil du produit</option><option value="forbidden">Interdit par le profil du produit</option>
+                    </select>
+                  </label>
+                </>}
                 <label className="text-field">
                   Nom
                   <input
@@ -328,6 +343,7 @@ export function CatalogEditor({
                     }
                   />
                 </label>
+                <MountingHoleEditor model={draft} onChange={setDraft} />
                 <label className="text-field">
                   Forme
                   <select

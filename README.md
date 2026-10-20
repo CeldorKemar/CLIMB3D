@@ -71,6 +71,12 @@ Sélectionner un pan ou un sol pour afficher les boutons **X−/X+, Y−/Y+, Z�
 
 Dans le catalogue, les boutons **Pyramide à inserts · démo** et **Dôme à 4 boulons · démo** ajoutent des profils synthétiques distincts. La pyramide reçoit des prises sur ses quatre inserts inclinés. Déclarer leur stock avant placement. Pour un volume vissé sur un support prépercé, renseigner la trame de trous pilotes dans les propriétés du pan ; les marqueurs orange sont distincts des inserts. Un modèle déjà inventorié doit être dupliqué pour changer son profil.
 
+Dans le catalogue, **Mode de fixation** propose boulons sur inserts, vis sur pilotes et vissage direct. Ces modes existent pour les prises et les volumes. Les trous de la pièce sont conservés quand on change de mode.
+
+Pour préparer un support : le sélectionner, activer **Autoriser le préperçage de ce support** si le produit le permet, puis choisir une pièce, cocher **Préparer les trous pilotes puis placer** et saisir le diamètre pilote en millimètres. L’aperçu affiche les trous à préparer. Le clic ajoute les trous et la pièce ensemble ; une seule annulation retire cette opération. Sur un volume, seuls les trous de cet exemplaire sont modifiés. Une interdiction du profil produit bloque la préparation.
+
+Pour modifier les trous de la pièce elle-même : ouvrir l’éditeur de catalogue, dupliquer le modèle s’il possède du stock ou des placements, puis renseigner **Référence autorisant la modification**. On peut alors ajouter, déplacer, dimensionner ou supprimer ses trous de fixation et préciser leur rôle. La référence est une déclaration de l’utilisateur, sans vérification documentaire automatique. Les vérifications géométriques restent actives. Le diamètre du pilote dans le support se renseigne séparément du diamètre de passage de la pièce.
+
 Les profils de fixation sont génériques et non certifiés ; aucun résultat du logiciel ne valide mécaniquement une installation réelle.
 
 ## Commandes et vérification

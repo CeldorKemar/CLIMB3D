@@ -1,4 +1,4 @@
-import { getMountingHoles } from '@climbed/geometry';
+import { getMountingHoles, prepareSupportForPlacement } from '@climbed/geometry';
 import { beforeAll, beforeEach, afterAll, describe, expect, it } from 'vitest';
 import { Pool } from 'pg';
 import type { SceneDocument } from '@climbed/contracts';
@@ -92,6 +92,51 @@ describe.skipIf(!testUrl)('PostgreSQL : fixations autoritaires et compatibilité
     const after = await repository.room(alice, fixtures.roomA);
     expect(after.scene).toEqual(prepared.scene); expect(after.revision).toBe(prepared.revision);
     expect(after.inventory).toEqual(prepared.inventory); expect(after.audit).toEqual(prepared.audit);
+  });
+
+  it('sauvegarde trous préparés et placement ensemble sans réécrire le catalogue ni réserver de stock', async () => {
+    const scene=testScene(),source=scene.models.find(m=>m.id==='volume-dome')!;
+    const model={...source,id:'planned-dome',mounting:{method:'screw' as const,holes:getMountingHoles(source)}};
+    scene.models.push(model);scene.walls[0]!.supportFixings={allowScrews:true,holes:[]};scene.walls[0]!.allowPilotDrilling=true;
+    const before=await save(scene),placement=wallPlacement('prepared-volume',model.id);
+    const prepared=prepareSupportForPlacement(scene,placement,{pilotDiameter:.003}).scene;
+    prepared.placements.push(placement);
+    await save(prepared);
+    const after=await repository.room(alice,fixtures.roomA);
+    expect(after.scene.walls[0]!.preparedPilotHoles).toHaveLength(4);
+    expect(after.scene.placements).toEqual([placement]);
+    expect(after.scene.models).toEqual(before.scene.models);
+    expect(after.inventory).toEqual(before.inventory);expect(after.occupations).toEqual(before.occupations);
+  });
+
+  it('refuse des trous préparés sans permission et conserve versions, audit, stock et scène', async () => {
+    const scene=testScene(),source=scene.models.find(m=>m.id==='volume-dome')!;
+    scene.models.push({...source,id:'unauthorized-dome',mounting:{method:'screw',holes:getMountingHoles(source)}});
+    scene.walls[0]!.supportFixings={allowScrews:true,holes:[]};
+    const before=await save(scene),allowed=structuredClone(scene);allowed.walls[0]!.allowPilotDrilling=true;
+    const placement=wallPlacement('unauthorized-volume','unauthorized-dome');
+    const prepared=prepareSupportForPlacement(allowed,placement,{pilotDiameter:.003}).scene;
+    prepared.placements.push(placement);delete prepared.walls[0]!.allowPilotDrilling;
+    const versions=await pool.query('SELECT count(*)::int AS n FROM scene_versions WHERE room_id=$1',[fixtures.roomA]);
+    await expect(save(prepared)).rejects.toMatchObject({status:400});
+    const after=await repository.room(alice,fixtures.roomA);
+    expect(after.scene).toEqual(before.scene);expect(after.revision).toBe(before.revision);
+    expect(after.audit).toEqual(before.audit);expect(after.inventory).toEqual(before.inventory);
+    expect((await pool.query('SELECT count(*)::int AS n FROM scene_versions WHERE room_id=$1',[fixtures.roomA])).rows).toEqual(versions.rows);
+  });
+
+  it('exige une référence pour modifier les trous puis verrouille le modèle dès sa mise en stock', async () => {
+    const scene=testScene(),source=scene.models.find(m=>m.id==='volume-dome')!;
+    scene.models.push({...source,id:'editable-dome',mounting:{method:'screw',holes:getMountingHoles(source)}});
+    await save(scene);
+    const model=scene.models.find(m=>m.id==='editable-dome')!;model.mounting!.holes[0]!.position[0]+=.01;
+    await expect(save(scene)).rejects.toMatchObject({status:400});
+    model.mounting!.modificationAuthorization={reference:'Notice déclarée du produit de test'};
+    await save(scene);
+    const before=await repository.room(alice,fixtures.roomA);
+    await repository.setInventory(alice,fixtures.roomA,model.id,1,before.revision,crypto.randomUUID());
+    model.mounting!.holes[0]!.position[0]+=.01;
+    await expect(save(scene)).rejects.toMatchObject({status:409});
   });
 
 });

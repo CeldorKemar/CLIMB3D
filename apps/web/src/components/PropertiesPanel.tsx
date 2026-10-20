@@ -8,6 +8,9 @@ import {
   getMountingHoles,
   getMountingMethod,
   validatePlacementMounting,
+  getSupportFixings,
+  prepareSupportForPlacement,
+  requiredPilotHoles,
 } from "@climbed/geometry";
 import type { SceneDocument, Quat, Vec3 } from "@climbed/contracts";
 import type { Edit } from "../domain/editor";
@@ -26,6 +29,8 @@ interface Props {
   hiddenRouteIds: string[];
   setHiddenRouteIds: (ids: string[]) => void;
   onDuplicate: (id: string) => void;
+  pilotDiameterMm: string;
+  setPilotDiameterMm: (value: string) => void;
 }
 export function PropertiesPanel({
   scene,
@@ -39,10 +44,15 @@ export function PropertiesPanel({
   hiddenRouteIds,
   setHiddenRouteIds,
   onDuplicate,
+  pilotDiameterMm,
+  setPilotDiameterMm,
 }: Props) {
   const wall = scene.walls.find((w) => w.id === selected);
   const placement = scene.placements.find((p) => p.id === selected);
   const model = scene.models.find((m) => m.id === placement?.modelId);
+  const receivingSupport = wall ?? (model?.kind === 'volume' ? model : undefined);
+  const receivingOwner = wall ?? (model?.kind === 'volume' ? placement : undefined);
+  const receivingFixings = receivingSupport ? getSupportFixings(receivingSupport) : undefined;
   function changeWall(patch: object) {
     edit((d) => Object.assign(d.walls.find((w) => w.id === selected)!, patch));
   }
@@ -171,7 +181,7 @@ export function PropertiesPanel({
             <h4>Préperçage pour les vis</h4>
             <label><input type="checkbox" aria-label="Activer la trame de trous pilotes" checked={!!wall.pilotGrid}
               onChange={event => changeWall({ pilotGrid: event.target.checked ? { pitchX: .25, pitchY: .25, offsetX: .125, offsetY: .125 } : undefined })} /> Trame de trous pilotes (orange)</label>
-            <p className="small-muted">Distincts des inserts filetés. À renseigner selon le pan réel ; aucun trou n’est créé automatiquement au placement.</p>
+            <p className="small-muted">Distincts des inserts filetés. À renseigner selon le pan réel. La préparation de nouveaux trous nécessite une action explicite.</p>
             {wall.pilotGrid && <div className="field-pair">
               {(['pitchX', 'pitchY', 'offsetX', 'offsetY'] as const).map(key => <NumberField key={key}
                 label={{ pitchX: 'Pas pilote X', pitchY: 'Pas pilote Y', offsetX: 'Décalage pilote X', offsetY: 'Décalage pilote Y' }[key]}
@@ -373,8 +383,24 @@ export function PropertiesPanel({
           </div>
         </>
       )}
+      {receivingOwner && receivingFixings && <div className="property-section">
+        <h4>Préparer ce support</h4>
+        <label><input type="checkbox" aria-label="Autoriser le préperçage de ce support"
+          disabled={!receivingFixings.allowScrews || receivingFixings.allowDrilling === false || receivingFixings.allowDrilling === true}
+          checked={receivingFixings.allowDrilling === true || !!receivingOwner.allowPilotDrilling}
+          onChange={e => wall ? changeWall({allowPilotDrilling:e.target.checked}) : changePlacement({allowPilotDrilling:e.target.checked})}/>
+          Autoriser le préperçage de ce support</label>
+        <p className="small-muted">{receivingFixings.allowDrilling === false ? 'Le profil produit interdit le préperçage.' : receivingFixings.allowDrilling === true ? 'Le profil produit déclare le préperçage autorisé.' : 'À activer uniquement si le matériau et les instructions du produit le permettent.'} Les trous sont planifiés sur ce support uniquement.</p>
+        <p className="small-muted">{receivingOwner.preparedPilotHoles?.length ?? 0} trous pilotes préparés.</p>
+      </div>}
       {model && <div className="property-section"><p className="small-muted">{getMountingHoles(model).length} fixations requises · {getMountingMethod(model) === 'bolt' ? 'sur inserts compatibles' : model.mounting?.screwPlacement === 'direct' ? 'vissage direct autorisé' : 'sur trous pilotes compatibles'}. Aucun montage partiel n’est accepté.</p>
         {placement && validatePlacementMounting(scene, placement).length > 0 && <p className="error-banner" role="status">Placement hérité à corriger : {validatePlacementMounting(scene, placement).join(' · ')}</p>}
+        {placement && requiredPilotHoles(model).length > 0 && <>
+          <label className="text-field">Diamètre pilote à préparer (mm)
+            <input type="number" aria-label="Diamètre pilote du support sélectionné" min={1} max={50} step={.1} value={pilotDiameterMm} onChange={e=>setPilotDiameterMm(e.target.value)}/>
+          </label>
+          <button className="secondary" onClick={()=>edit(d=>Object.assign(d,prepareSupportForPlacement(d,d.placements.find(p=>p.id===placement.id)!,{pilotDiameter:Number(pilotDiameterMm)/1000}).scene))}>Préparer les trous pilotes du support</button>
+        </>}
       </div>}
       {position && (
         <div className="property-section">

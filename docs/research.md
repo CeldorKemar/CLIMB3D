@@ -116,3 +116,10 @@ La solution proposée sépare les **fixations de l'objet sur son support** et le
 Huit essais supplémentaires dans le lot suivant : guide PDF candidat Metolius, sites Cheeta, Bluepill, Atomik, Escape et EP, recherche Google « climbing volumes all screw holes mounting instructions », et chemin de forum candidat Mountain Project. Tous ont échoué avec `Tunnel connection failed: 403 Forbidden`, avant toute réception de notice ou d’image. Preuves locales : `.data/research/fixations-followup/responses.json`. Le chemin candidat de forum n’est pas une référence vérifiée.
 
 Aucune conclusion spécifique à un fabricant n’est possible sur un montage à une ou deux vis, ni sur la disposition des inserts d’une pyramide commerciale. Le POC exige les fixations déclarées et fournit des profils synthétiques distincts ; [fixations.md](fixations.md) expose ce qui est implémenté et ce qui reste à documenter.
+
+
+## Modes de montage et perçage autorisé
+
+Nouvelle tentative : Metolius (PDF candidat), Atomik, Escape, Cheeta, Bluepill et Entre-Prises ; refus HTTP 403, aucun contenu reçu. Le contrôle supplémentaire du PDF candidat Metolius renvoie également 403. Preuve locale : `.data/research/mounting-modes/responses.json`. Aucun extrait constructeur, nombre de vis facultatives ou diamètre pilote n’est vérifié.
+
+Le porteur du projet a autorisé la préparation du support et la modification des trous de la pièce lorsque son produit l’autorise. Le fonctionnement implémenté et ses limites figurent au dernier complément de [fixations.md](fixations.md). Les autorisations saisies restent des déclarations de l’utilisateur ; les modèles fournis restent synthétiques.

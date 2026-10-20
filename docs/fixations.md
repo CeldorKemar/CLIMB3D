@@ -128,7 +128,7 @@ La présence de ces champs ne prouve pas leur affichage complet dans l'interface
 4. **Ajouter ensuite une aide au placement par mode** : choix d'un insert pour une pièce boulonnée ; surface et points de vis pour une pièce prévue pour vissage ; combinaison explicite si plusieurs interfaces sont requises. L'information inconnue reste signalée au lieu d'être inventée.
 5. **Présenter une liste de points à contrôler par l'ouvreur**, avec les sources disponibles, sans transformer une vérification géométrique en approbation mécanique.
 
-Le POC implémente désormais le placement contraint décrit ci-dessous. Une bibliothèque de profils fabricant vérifiés et un outil de perçage libre restent à réaliser.
+Le POC implémente désormais le placement contraint décrit ci-dessous. Une bibliothèque de profils fabricant vérifiés reste à réaliser. Le dernier complément ci-dessous décrit les opérations de perçage désormais autorisées par le porteur du projet.
 
 ## Recherche effectuée et poursuite documentaire
 
@@ -179,3 +179,36 @@ Deux nouveaux exemples du catalogue ont une identité propre : une pyramide à q
 Les placements hérités inchangés restent conservés, avec avertissement dans leurs propriétés s’ils ne respectent pas les règles courantes. Une modification du support peut réparer des défauts hérités sans imposer de déplacer les autres pièces, mais ne peut pas invalider une fixation auparavant valide. Une nouvelle pièce ou une pièce déplacée doit satisfaire toutes ses fixations.
 
 La photo de salle fournie par le porteur du projet montre aussi qualitativement le cas de prises posées sur certains volumes noirs. Elle ne permet pas de relever les filetages, les entraxes ni le nombre de fixations au mur et ne sert donc pas de profil constructeur.
+
+
+## Complément — modes et préparation autorisée
+
+Le porteur du projet a validé la préparation de trous dans le support **et la modification des trous de la pièce si son produit l’autorise**. L’application distingue désormais :
+
+| Interface | Profil de la pièce | Exigence du support |
+| --- | --- | --- |
+| Prise ou volume sur pan | Boulonnage | Chaque trou principal aligné avec un insert compatible existant |
+| Prise ou volume sur pan | Vissage sur pilotes | Chaque trou de vis aligné avec un pilote existant ou explicitement préparé |
+| Prise sur volume | Boulonnage ou vissage | Mêmes règles, dans le repère local du volume ; capacités du volume renseignées séparément |
+| Vissage direct | Profil qui déclare ce mode | Tous les points de vis sur une surface autorisant le vissage, sans obligation de trame d’inserts |
+
+**Pièce prépercée et support prépercé sont deux informations différentes.** Un passage de vis dans un volume ne signifie pas que sa vis doit se trouver dans un insert fileté du mur. Le mode choisi détermine s’il faut un insert, un pilote ou une surface autorisée. Les vis à bois décrites dans l’étude provisoire concernent donc potentiellement les deux interfaces volume/panneau mural et prise/panneau mural, ainsi que prise/volume lorsqu’il le permet ; aucune marque précise n’est confirmée par cette généralité.
+
+### Préparer le support
+
+- `allowPilotDrilling` est une permission propre au pan ou à l’exemplaire d’un volume ; un profil `supportFixings.allowDrilling: false` reste prioritaire et interdit la préparation. Le support doit aussi accepter les vis.
+- L’action explicite demande un diamètre pilote de 1 à 50 mm. Ces bornes sont des limites de saisie du logiciel, pas une recommandation de foret. Aucun diamètre pilote n’est déduit du trou de passage, du diamètre de vis ou d’un filetage.
+- Les trous manquants sont calculés depuis les points de fixation de la pièce, avec sa rotation et le repère du support. Les pilotes déjà présents sont réutilisés. Aucun insert de boulonnage n’est créé par cette action.
+- Chaque trou est vérifié sur la surface, y compris son bord ; les recouvrements avec les trous ou inserts existants et les ouvertures sont refusés. Ces contrôles géométriques ne calculent pas de distance structurelle minimale au bord.
+- Les `preparedPilotHoles` restent attachés au pan ou à l’exemplaire concerné. Un volume possède réellement ces perçages dans sa géométrie rendue ; son modèle catalogue et ses voisins restent inchangés. Les panoramas de pans montrent les points pilotes orange.
+- Le clic de préparation/pose est atomique et annulable. Le panneau des propriétés propose aussi de préparer les pilotes du support d’une pièce sélectionnée. Sauvegarde et restauration conservent les trous, sous les mêmes validations côté serveur. Ces actions de conception ne réalisent ni perçage physique ni réservation de stock.
+
+### Modifier les trous de la pièce
+
+L’éditeur de catalogue exige une `mounting.modificationAuthorization.reference` avant d’activer les commandes d’ajout, déplacement, diamètre, rôle et suppression des trous. La référence peut être une notice ou une instruction identifiée ; elle est déclarée par l’utilisateur et n’est pas automatiquement vérifiée. Le serveur exige aussi une référence déclarée pour changer un schéma de trous existant ; l’autorisation du précédent état permet son retour arrière. Les modèles déjà inventoriés ou placés restent immuables : créer une variante, qui commence sans stock.
+
+L’édition reste limitée au plan de montage des formes paramétriques V1. Elle ne modélise pas encore un perçage oblique quelconque dans un scan ni la structure d’une coque fabricant. Les trous doivent rester dans la matière et ne pas se recouvrir. Tous les trous déclarés restent requis pour la pose ; aucun solveur ne conclut que deux vis en diagonale suffisent.
+
+### Sources de ce complément
+
+Les nouveaux essais vers Metolius (PDF candidat), Atomik, Escape, Cheeta, Bluepill et Entre-Prises ont encore reçu des refus HTTP 403. Le contrôle supplémentaire vers le guide candidat Metolius a également échoué. Aucune notice n’a été reçue ou lue. Les résultats locaux sont conservés dans `.data/research/mounting-modes/responses.json`, ignoré par Git. Le lien Metolius du tableau précédent reste un candidat non vérifié, pas une source technique consultée. Aucune cote ni permission fabricant n’a été ajoutée au catalogue à partir de ces refus.

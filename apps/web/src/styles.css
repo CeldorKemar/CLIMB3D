@@ -1038,8 +1038,17 @@ button svg {
   padding: 10px 11px;
   font-size: 10px;
   box-shadow: 0 5px 20px #1c352422;
-  white-space: nowrap;
+  white-space: normal;
+  width: max-content;
+  max-width: 92%;
+  flex-wrap: wrap;
 }
+.placement-hint label { display: flex; align-items: center; gap: 5px; }
+.placement-hint input[type="number"] { width: 64px; padding: 4px; color: #233e35; background: #f5f7f0; border-radius: 3px; }
+.mounting-hole-editor { margin: 14px 0; }
+.mounting-hole-editor > p { margin: 8px 0; }
+.mounting-hole-editor fieldset { border: 0; padding: 0; min-width: 0; }
+.mounting-hole-row { padding: 12px 0; border-top: 1px solid #d8dfd3; }
 .placement-hint .status-dot {
   background: #c3e195;
 }

@@ -27,12 +27,16 @@ import {
   snapPlacementToFixing,
   validatePlacementMounting,
   validateSceneChange,
+  getPlacementModel,
+  prepareSupportForPlacement,
+  snapPlacementAnchorToFixing,
 } from "@climbed/geometry";
 export interface SurfacePoint {
   parentType: "wall" | "volume";
   parentId: string;
   position: Vec3;
   rotation: Quat;
+  preparePilotDiameter?: number;
 }
 export type ViewMode = "perspective" | "front" | "top";
 export interface PlacementPreviewStatus {
@@ -53,6 +57,8 @@ interface Props {
   hiddenRouteIds: string[];
   remainingStock?: ReadonlyMap<string, number>;
   onPreviewStatus?: (status: PlacementPreviewStatus | null) => void;
+  prepareSupport?: boolean;
+  pilotDiameter?: number;
 }
 function Fixings({ support }: { support: WallDefinition | ModelDefinition }) {
   const geometry = useMemo(() => {
@@ -225,6 +231,9 @@ export function SceneCanvas(props: Props) {
     () => new Map(scene.walls.map((w) => [w.id, createWallGeometry(w)])),
     [scene.walls],
   );
+  const preparedGeometries = useMemo(() => new Map(scene.placements.filter(p=>p.preparedPilotHoles?.length).map(p=>
+    [p.id, createModelGeometry(getPlacementModel(scene,p)!)])), [scene.models, scene.placements]);
+  useEffect(()=>()=>preparedGeometries.forEach(g=>g.dispose()), [preparedGeometries]);
   useEffect(
     () => () => {
       geometries.forEach((g) => g.dispose());
@@ -249,24 +258,36 @@ export function SceneCanvas(props: Props) {
       if (hoverTimer.current) clearTimeout(hoverTimer.current);
     };
   }, [activeModel?.id]);
-  const preview = useMemo(() => {
-    if (!activeModel || !hover) return null;
+  function evaluate(point: SurfacePoint) {
+    if (!activeModel) return null;
     const raw: Placement = {
       id: previewId.current,
       modelId: activeModel.id,
       modelVersion: activeModel.version,
-      ...hover,
+      parentType: point.parentType, parentId: point.parentId, position: point.position, rotation: point.rotation,
     };
-    const snapped = snapPlacementToFixing(scene, raw);
+    const snapped = props.prepareSupport ? snapPlacementAnchorToFixing(scene, raw) : snapPlacementToFixing(scene, raw);
     const candidate = snapped ?? raw;
-    const reasons = [...validatePlacementMounting(scene, candidate)];
+    let prepared = scene, addedHoleCount = 0;
+    const reasons: string[] = [];
+    if (props.prepareSupport) {
+      try { const result=prepareSupportForPlacement(scene,candidate,{pilotDiameter:props.pilotDiameter}); prepared=result.scene; addedHoleCount=result.addedHoleCount; }
+      catch(error) { reasons.push((error as Error).message); }
+    }
+    reasons.push(...validatePlacementMounting(prepared, candidate));
     if (
       props.remainingStock &&
       (props.remainingStock.get(activeModel.id) ?? 0) <= 0
     )
       reasons.push("Aucune pièce disponible en stock.");
-    const proposed = { ...scene, placements: [...scene.placements, candidate] };
+    const proposed = { ...prepared, placements: [...prepared.placements, candidate] };
     reasons.push(...validateSceneChange(scene, proposed));
+    return {candidate, valid:reasons.length===0, reasons, addedHoleCount};
+  }
+  const preview = useMemo(() => {
+    if (!activeModel || !hover) return null;
+    const evaluation = evaluate(hover)!;
+    const {candidate, reasons} = evaluation;
     const labels = new Map([
       [candidate.id, activeModel.name],
       ...scene.walls.map((w) => [w.id, w.name] as const),
@@ -284,11 +305,10 @@ export function SceneCanvas(props: Props) {
       return reason;
     });
     return {
-      candidate,
-      valid: reasons.length === 0,
+      ...evaluation,
       reasons: [...new Set(readable)],
     };
-  }, [scene, activeModel, hover, props.remainingStock]);
+  }, [scene, activeModel, hover, props.remainingStock, props.prepareSupport, props.pilotDiameter]);
   useEffect(() => {
     previewCallback.current?.(
       preview ? { valid: preview.valid, reasons: preview.reasons } : null,
@@ -339,33 +359,17 @@ export function SceneCanvas(props: Props) {
     } else if (!activeModel) onSelect(id, e.ctrlKey || e.metaKey);
   }
   function placePoint(point: SurfacePoint) {
-      if (!activeModel) return;
-      const raw: Placement = {
-        id: previewId.current,
-        modelId: activeModel.id,
-        modelVersion: activeModel.version,
-        ...point,
-      };
-      const candidate = snapPlacementToFixing(scene, raw) ?? raw;
-      const errors = [
-        ...validatePlacementMounting(scene, candidate),
-        ...validateSceneChange(scene, {
-          ...scene,
-          placements: [...scene.placements, candidate],
-        }),
-      ];
-      if (
-        props.remainingStock &&
-        (props.remainingStock.get(activeModel.id) ?? 0) <= 0
-      )
-        errors.push("Aucune pièce disponible en stock.");
+      const evaluation=evaluate(point);
+      if (!evaluation) return;
+      const {candidate, valid}=evaluation;
       setHover(point);
-      if (!errors.length)
+      if (valid)
         onPlace({
           parentType: candidate.parentType,
           parentId: candidate.parentId,
           position: candidate.position,
           rotation: candidate.rotation,
+          ...(props.prepareSupport && evaluation.addedHoleCount ? {preparePilotDiameter:props.pilotDiameter} : {}),
         });
   }
   function moved(
@@ -422,9 +426,9 @@ export function SceneCanvas(props: Props) {
   }
   function placementMesh(p: Placement) {
     if (!visibleIds.has(p.id)) return null;
-    const model = scene.models.find((m) => m.id === p.modelId);
+    const model = getPlacementModel(scene,p);
     if (!model) return null;
-    const geometry = geometries.get(model.id);
+    const geometry = preparedGeometries.get(p.id) ?? geometries.get(model.id);
     if (!geometry) return null;
     return (
       <group key={p.id} position={p.position} quaternion={p.rotation}>
@@ -443,7 +447,7 @@ export function SceneCanvas(props: Props) {
         {model.kind === "volume" && (
           <>
             {grid && <Fixings support={model} />}
-            {activeModel?.kind === "hold" && getMountingMethod(activeModel) === "bolt" &&
+            {activeModel?.kind === "hold" &&
               <InsertTargets model={model} parentId={p.id} onOut={clearHover}
                 onMove={queueHover} onClick={(event, point) => {
                   event.stopPropagation();
@@ -506,7 +510,7 @@ export function SceneCanvas(props: Props) {
           }}
         >
           {preview.valid
-            ? "Placement possible — fixations alignées"
+            ? preview.addedHoleCount ? `Placement possible — ${preview.addedHoleCount} trous pilotes à préparer sur le support` : "Placement possible — fixations alignées"
             : preview.reasons.join(" · ")}
         </output>
       )}

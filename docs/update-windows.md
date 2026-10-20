@@ -21,3 +21,6 @@ La préparation applique aussi les nouvelles migrations de base de données. Ell
 Ne pas lancer simultanément les deux versions. Ne pas supprimer le volume PostgreSQL et ne pas utiliser `docker compose down -v` : cette option supprime les données. Conserver aussi l’ancien `.env` si une configuration a été personnalisée.
 
 Les migrations sont additives et les anciennes versions restent dans Git. Un retour au code précédent doit néanmoins être vérifié avec les nouvelles données avant de travailler dessus. Les sauvegardes nommées de l’application restaurent la conception ; elles ne remplacent pas une sauvegarde PostgreSQL pour se protéger d’une perte du volume.
+
+
+La mise à jour des modes de fixation ajoute des champs facultatifs aux documents de salle, sans migration SQL. Le nouveau code accepte les anciens documents. Après sauvegarde de trous préparés ou d’autorisations de modification, l’ancien code strict peut refuser ces nouveaux champs : un retour à cette version demande aussi la sauvegarde PostgreSQL prise avant mise à jour. Garder seulement l’ancien dossier du code ne sauvegarde pas les données.

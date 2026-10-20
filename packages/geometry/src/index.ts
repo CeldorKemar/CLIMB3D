@@ -7,7 +7,9 @@ import {
   Matrix4, Path, Quaternion, Shape, Triangle, Vector3,
 } from 'three';
 import { detectSolidContacts, type CollisionPair, type CollisionSolid } from './collisions';
-import { getMountingHoles, getSupportFixings, mountingFingerprint, mountingObjectFingerprint, validatePlacementMounting } from './mounting';
+import { getMountingHoles, getSupportFixings, getPlacementModel, mountingFingerprint, mountingObjectFingerprint, validatePlacementMounting } from './mounting';
+import { validatePreparedSupportChange, validatePreparedSupportGeometry } from './support-preparation';
+export * from './support-preparation';
 import { perforateGeometry } from './perforation';
 import { validateRoomLayout } from './layout';
 export * from './mounting';
@@ -307,6 +309,12 @@ function modelMountingErrors(model: ModelDefinition): string[] {
       }
     }
   }
+  for (let i = 0; i < holes.length; i++) for (let j = i + 1; j < holes.length; j++) {
+    const a = holes[i]!, b = holes[j]!;
+    if (new Vector3(...a.position).distanceTo(new Vector3(...b.position)) < (a.diameter + b.diameter) / 2) {
+      errors.push(`Les trous de fixation ${a.id} et ${b.id} se recouvrent sur le modèle ${model.id}`);
+    }
+  }
   if (model.mounting?.method === 'bolt' && !holes.some(h => h.role === 'primary')) {
     errors.push(`Aucun trou principal de boulonnage sur le modèle ${model.id}`);
   }
@@ -404,7 +412,7 @@ export function isPointOnModelSurface(model: ModelDefinition, point: Vec3, rotat
 export function validateScene(scene: SceneDocument, options: { collisions?: boolean; mounting?: boolean } = {}): string[] {
   const parsed = sceneSchema.safeParse(scene);
   if (!parsed.success) return parsed.error.issues.map(issue => `${issue.path.join('.')} : ${issue.message}`);
-  const errors: string[] = [...validateRoomLayout(scene)];
+  const errors: string[] = [...validateRoomLayout(scene), ...validatePreparedSupportGeometry(scene)];
   const allIds = new Set<string>();
   for (const item of [...scene.walls, ...scene.models, ...scene.placements, ...scene.boulders]) {
     if (allIds.has(item.id)) errors.push(`Identifiant dupliqué : ${item.id}`);
@@ -430,7 +438,7 @@ export function validateScene(scene: SceneDocument, options: { collisions?: bool
       }
     } else {
       const parent = placements.get(placement.parentId);
-      const parentModel = parent && models.get(parent.modelId);
+      const parentModel = parent && getPlacementModel(scene, parent);
       if (!parent || !parentModel) errors.push(`Support introuvable : ${placement.parentId}`);
       else {
         if (parentModel.kind !== 'volume' || model.kind !== 'hold' || parent.parentType !== 'wall') {
@@ -482,10 +490,11 @@ export function findSceneCollisions(scene: SceneDocument): CollisionPair[] {
       solids.push({ id: wall.id, geometry: createWallGeometry(wall), matrix: poseMatrix(wall), exemptIds: wallIds });
     }
     for (const placement of scene.placements) {
-      const model = models.get(placement.modelId);
+      const model = placement.preparedPilotHoles?.length ? getPlacementModel(scene, placement) : models.get(placement.modelId);
       if (!model) continue;
-      let geometry = geometryByModel.get(model.id);
-      if (!geometry) { geometry = createModelGeometry(model); geometryByModel.set(model.id, geometry); }
+      const geometryKey = placement.preparedPilotHoles?.length ? placement.id : model.id;
+      let geometry = geometryByModel.get(geometryKey);
+      if (!geometry) { geometry = createModelGeometry(model); geometryByModel.set(geometryKey, geometry); }
       solids.push({ id: placement.id, geometry, matrix: poseMatrix(resolvePose(placement.id)), exemptIds: new Set([placement.parentId]) });
     }
     return detectSolidContacts(solids);
@@ -580,13 +589,24 @@ function solidFingerprint(scene: SceneDocument, id: string): string {
   if (wall) return JSON.stringify([wall.width, wall.height, wall.thickness, wall.openings, wall.position, wall.rotation]);
   const placement = scene.placements.find(p => p.id === id);
   const model = placement && scene.models.find(m => m.id === placement.modelId);
-  return JSON.stringify([model?.shape, model?.dimensions, placement && getWorldPose(scene, id)]);
+  return JSON.stringify([model?.shape, model?.dimensions, placement?.preparedPilotHoles?.map(h => [h.id, h.position, h.normal, h.diameter]), placement && getWorldPose(scene, id)]);
 }
 
 /** Legacy contacts may survive unchanged. A changed colliding object must resolve its contact. */
 export function validateSceneChange(previous: SceneDocument, next: SceneDocument): string[] {
   const errors = validateScene(next, { collisions: false });
   if (errors.length) return errors;
+  errors.push(...validatePreparedSupportChange(previous, next));
+  for (const model of next.models) {
+    const old = previous.models.find(m => m.id === model.id);
+    // Product imports may declare their factory pattern. Editing an existing
+    // pattern requires an explicit product authorization, including via the API.
+    const pattern = (m: ModelDefinition) => JSON.stringify(getMountingHoles(m).map(h => [h.position, h.diameter, h.role]));
+    if (old && (model.mounting || old.mounting) && pattern(old) !== pattern(model) &&
+        !(model.mounting?.modificationAuthorization || old.mounting?.modificationAuthorization)) {
+      errors.push(`Référence autorisant la modification des trous de la pièce requise : ${model.id}`);
+    }
+  }
   const key = (pair: CollisionPair) => JSON.stringify([pair.firstId, pair.secondId]);
   const oldPlacements = new Map(previous.placements.map(p => [p.id, p]));
   for (const placement of next.placements) {

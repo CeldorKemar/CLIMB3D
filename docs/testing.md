@@ -201,3 +201,12 @@ WEB_BASE_URL=http://127.0.0.1:3002 API_BASE_URL=http://127.0.0.1:3002/api/v1 npm
 Trois nouveaux parcours UI complètent les 35 précédents : déplacement global et annulation, protection des champs et minimap sans sol ; dôme à quatre trous pilotes avec aperçu rouge/vert et refus HTTP partiel ; exemple de pyramide créé depuis le catalogue et vraie pose WebGL d’une prise sur un insert incliné. La capture de cette pyramide est une preuve du modèle synthétique, pas une image de produit fabricant.
 
 Campagne finale : **38/38 réussis en 3,0 min**, aucun skip. Le nettoyage n’agit que sur les modèles créés par le scénario ; les stocks historiques de la fixture restent protégés. La préparation contrôle les quantités initiales attendues et l’absence d’occupations actives.
+
+
+## Modes de montage et préparation explicite
+
+Les neuf tests de `packages/geometry/tests/support-preparation.test.ts` couvrent permission, diamètre, pilotes réutilisés, trous sur bords/ouvertures, recouvrement d’inserts, exemplaire de volume isolé avec vrai perçage, autorisation produit et modification de pièce. Les intégrations PostgreSQL ajoutent trois cas d’atomicité, refus sans effets partiels et verrouillage après mise en stock.
+
+`tests/e2e/preparation.spec.ts` ajoute trois parcours Chromium : catalogue et autorisation des trous de pièce ; préparation/pose d’un dôme, annulation atomique et persistance ; prise vissée sur un exemplaire de volume préparé. Les scènes d’origine sont restaurées et seul le stock créé par le scénario est retiré. Les anciennes définitions ne sont pas réécrites pour assouplir les règles.
+
+Campagne navigateur finale de ce complément : **41/41 réussis en 3,3 min**, aucun skip, dont 12 parcours HTTP et 29 parcours Chromium avec WebGL. Les 38 scénarios précédents passent avec les trois nouveaux.
