@@ -17,6 +17,7 @@ import type { Edit } from "../domain/editor";
 import { removePlacement } from "../domain/editor";
 import { NumberField } from "./Fields";
 import { RoutePanel } from "./RoutePanel";
+import {WallFixingsEditor} from './WallFixingsEditor';
 interface Props {
   scene: SceneDocument;
   selected: string | null;
@@ -177,6 +178,7 @@ export function PropertiesPanel({
       )}
       {wall && (
         <>
+          <WallFixingsEditor wall={wall} onChange={changeWall}/>
           <div className="property-section">
             <h4>Préperçage pour les vis</h4>
             <label><input type="checkbox" aria-label="Activer la trame de trous pilotes" checked={!!wall.pilotGrid}

@@ -27,6 +27,35 @@ export function projectWallFootprint(wall: WallDefinition): PlanPoint[] {
   return [...half(points), ...half([...points].reverse())];
 }
 
+/** Floor-plan trace of a panel's base, without projecting its height/overhang. */
+export function projectWallBase(wall: WallDefinition): PlanPoint[] {
+  const q = new Quaternion(...wall.rotation);
+  return [[-wall.width / 2, -wall.thickness], [wall.width / 2, -wall.thickness], [wall.width / 2, 0], [-wall.width / 2, 0]].map(([x,z]) => {
+    const p = new Vector3(x!,0,z!).applyQuaternion(q).add(new Vector3(...wall.position));
+    return [p.x,p.z];
+  });
+}
+
+/** Keep the first standing panel of each connected vertical profile, per level.
+ * Infer shared full-width edges so legacy documents need no migration/group IDs.
+ * A near-horizontal face (within 5°) is a roof for this display rule only.
+ */
+export function getPlanWalls(scene: SceneDocument): WallDefinition[] {
+  const level = new Map(scene.walls.map(w => [w.id,getWallLevelId(scene,w)]));
+  const edges = scene.walls.map(w => {
+    const q = new Quaternion(...w.rotation), origin = new Vector3(...w.position);
+    const edge = (y:number) => [-w.width/2,w.width/2].map(x => new Vector3(x,y,0).applyQuaternion(q).add(origin));
+    return {wall:w,bottom:edge(0),top:edge(w.height),standing:Math.abs(new Vector3(0,0,1).applyQuaternion(q).y)<Math.cos(5*Math.PI/180)};
+  });
+  const coincides = (a:Vector3[],b:Vector3[]) =>
+    (a[0]!.distanceTo(b[0]!)<.0001&&a[1]!.distanceTo(b[1]!)<.0001)||
+    (a[0]!.distanceTo(b[1]!)<.0001&&a[1]!.distanceTo(b[0]!)<.0001);
+  return edges.filter(item => item.standing && !edges.some(lower =>
+    lower.wall.id!==item.wall.id && level.get(lower.wall.id)===level.get(item.wall.id) &&
+    lower.wall.position[1]<item.wall.position[1]-.0001 && coincides(lower.top,item.bottom),
+  )).map(item=>item.wall);
+}
+
 /** Legacy scenes acquire a finite floor without altering any existing world position. */
 export function getRoomLevels(scene: SceneDocument): RoomLevel[] {
   if (scene.levels?.length) return scene.levels;

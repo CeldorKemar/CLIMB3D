@@ -212,3 +212,10 @@ L’édition reste limitée au plan de montage des formes paramétriques V1. Ell
 ### Sources de ce complément
 
 Les nouveaux essais vers Metolius (PDF candidat), Atomik, Escape, Cheeta, Bluepill et Entre-Prises ont encore reçu des refus HTTP 403. Le contrôle supplémentaire vers le guide candidat Metolius a également échoué. Aucune notice n’a été reçue ou lue. Les résultats locaux sont conservés dans `.data/research/mounting-modes/responses.json`, ignoré par Git. Le lien Metolius du tableau précédent reste un candidat non vérifié, pas une source technique consultée. Aucune cote ni permission fabricant n’a été ajoutée au catalogue à partir de ces refus.
+
+
+## Compatibilité déclarée, trames et accès direct à la préparation
+
+Le dernier état documentaire et les règles figurent dans [fabricants-compatibilite.md](fabricants-compatibilite.md). Aucune nouvelle cote fabricant n’est vérifiée. Les pas, décalages et rotation de la trame du pan sont éditables ; une désignation et un système peuvent être saisis pour ses inserts et pour les boulons du modèle. Une exigence explicite n’est plus satisfaite par un insert au filetage inconnu. Le logiciel ne déduit pas le pas d’un diamètre et ne convertit pas implicitement métrique/impérial.
+
+Le choix d’une pièce ouvre le panneau « Réglages de pose », avec le support à préparer, son autorisation et le diamètre pilote. Les règles de fixation restent actives : le parcours corrige l’impasse des quatre vis sans pilotes par une préparation explicite, sans déplacer ni inventer les inserts existants.

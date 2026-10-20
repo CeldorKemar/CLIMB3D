@@ -34,6 +34,7 @@ import {
   translateStructure,
   prepareSupportForPlacement,
   requiredPilotHoles,
+  getPlanWalls,
 } from "@climbed/geometry";
 import { api } from "../api/client";
 import { useEditor } from "../hooks/useEditor";
@@ -61,6 +62,7 @@ import { HistoryPanel } from "./HistoryPanel";
 import { RoomMap } from "./RoomMap";
 import { LevelsPanel } from "./LevelsPanel";
 import { MoveControls } from "./MoveControls";
+import {PlacementControls,type PreparationTarget} from './PlacementControls';
 interface Props {
   session: BootstrapResponse;
   roomId: string;
@@ -89,6 +91,7 @@ export function Workspace({
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
   const [prepareSupport, setPrepareSupport] = useState(false);
   const [pilotDiameterMm, setPilotDiameterMm] = useState('');
+  const [placementSupport,setPlacementSupport] = useState<PreparationTarget>({parentType:'wall',parentId:initial.scene.walls[0]!.id});
   const [editorView, setEditorView] = useState<"room" | "catalog">("room");
   const [rightTab, setRightTab] = useState<
     "design" | "stock" | "history" | "levels"
@@ -678,6 +681,11 @@ export function Workspace({
               }}
               onModel={(m) => {
                 setPrepareSupport(false);
+                if(m) {
+                  setRightTab('design');
+                  const volume=m.kind==='hold'&&scene.placements.find(p=>p.id===selected&&scene.models.some(model=>model.id===p.modelId&&model.kind==='volume'));
+                  setPlacementSupport(volume?{parentType:'volume',parentId:volume.id}:{parentType:'wall',parentId:scene.walls.find(w=>w.id===selected)?.id??getPlanWalls(scene)[0]?.id??scene.walls[0]!.id});
+                }
                 setSelectedLevelId(null);
                 setActiveModelId(m?.id ?? null);
                 setSelection([]);
@@ -735,6 +743,9 @@ export function Workspace({
                   remainingStock={remaining}
                   prepareSupport={prepareSupport && !!activeModel && requiredPilotHoles(activeModel).length>0}
                   pilotDiameter={pilotDiameterMm.trim() ? Number(pilotDiameterMm)/1000 : undefined}
+                  onPreviewStatus={status=>{
+                    if(status)setPlacementSupport(old=>old.parentType===status.support.parentType&&old.parentId===status.support.parentId?old:status.support);
+                  }}
                 />
                 {moveTarget && moveName && !activeModel && <MoveControls name={moveName} step={moveStep} onStep={setMoveStep} onMove={moveStructure} />}
                 <RoomMap
@@ -818,8 +829,7 @@ export function Workspace({
                   <div className="placement-hint">
                     <span className="status-dot" />
                     <strong>{activeModel.name}</strong>
-                    {requiredPilotHoles(activeModel).length>0 && <label><input type="checkbox" aria-label="Préparer les trous pilotes puis placer" checked={prepareSupport} onChange={e=>setPrepareSupport(e.target.checked)}/> Préparer le support puis poser</label>}
-                    {prepareSupport && requiredPilotHoles(activeModel).length>0 && <label>Diamètre pilote (mm) <input type="number" min="1" max="50" step="0.1" aria-label="Diamètre pilote à préparer" value={pilotDiameterMm} onChange={e=>setPilotDiameterMm(e.target.value)}/></label>}
+                    <button onClick={()=>setRightTab('design')}>Réglages de pose →</button>
                     <span>
                       {Math.max(0, remaining.get(activeModel.id) ?? 0)} restants
                       · Cliquer pour poser
@@ -853,7 +863,7 @@ export function Workspace({
                 {rightTab === "design" ? (
                   <>
                     <Move3D size={15} />
-                    Propriétés
+                    {activeModel?'Réglages de pose':'Propriétés'}
                   </>
                 ) : rightTab === "stock" ? (
                   <>
@@ -872,7 +882,9 @@ export function Workspace({
                   </>
                 )}
               </div>
-              {rightTab === "design" ? (
+              {rightTab === 'design' && activeModel ? <PlacementControls scene={scene} model={activeModel} target={placementSupport} onTarget={setPlacementSupport}
+                prepare={prepareSupport} onPrepare={setPrepareSupport} diameter={pilotDiameterMm} onDiameter={setPilotDiameterMm} edit={edit}/>
+              : rightTab === "design" ? (
                 <PropertiesPanel
                   scene={scene}
                   selected={selected}

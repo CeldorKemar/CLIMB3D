@@ -234,3 +234,30 @@ Le point de retour avant ce complément est `6a38270`. La cible de livraison res
 - Point de retour avant ce lot : `1db682f`. Si une salle a été sauvegardée avec les nouveaux champs, un retour à l’ancien code strict exige aussi de restaurer sa sauvegarde de données antérieure à la mise à jour. Le lecteur actuel accepte les anciens documents ; l’ancien lecteur ne connaît pas les nouveaux champs.
 
 Campagne navigateur finale de ce complément : **41/41 réussis en 3,3 min**, aucun skip, dont 12 parcours HTTP et 29 parcours Chromium avec WebGL. Les 38 scénarios précédents passent avec les trois nouveaux.
+
+
+## Complément — volumes bloqués, pieds de murs et compatibilité déclarée
+
+### Réalisation
+
+- Blocage reproduit : les quatre vis des volumes génériques exigent des pilotes absents du pan. Le choix d’une pièce ouvre désormais « Réglages de pose », avec le nombre de fixations, le support, l’autorisation de préparation et le diamètre à saisir. Le support survolé est suivi ; aucune fixation n’est désactivée pour rendre la pose possible.
+- Les propriétés du pan éditent sa trame d’inserts : pas X/Y, décalages et rotation, ainsi que désignation, système et référence utilisateur. Le catalogue permet de déclarer les filetages d’une pièce boulonnée. Les points explicites d’un relevé ne sont pas remplacés par une trame.
+- Un filetage ou système explicitement requis impose une information correspondante sur l’insert ; une valeur inconnue ou incompatible est refusée, avec un message dédié. Aucune déduction de pas ou conversion métrique/impérial. Les anciens modèles, cotes et empreintes d’inventaire restent inchangés.
+- La minimap utilise la trace des pieds de murs. Les toits et les pans supérieurs raccordés sur toute leur largeur n’apparaissent plus et ne participent plus au cadrage du plan. Les premiers pans en dévers restent visibles ; les niveaux sont distingués. Cette règle est dérivée de la géométrie existante, sans migration des salles.
+- Le cadrage conserve Y comme verticale de la salle. Une face horizontale est approchée obliquement plutôt que d’appliquer son axe local à `camera.up`.
+
+### Recherche encore bloquée
+
+Les nouvelles requêtes vers huit destinations fabricant, AFNOR et Google ont reçu des refus HTTP 403 du proxy ; le témoin npm répond 200. Aucune notice ni clause normative n’a été reçue. [Le relevé de compatibilité](fabricants-compatibilite.md) conserve les destinations et l’état réel de l’étude. Les dimensions ne sont pas remplacées par des valeurs prétendument universelles. Le brouillon d’environnement a été complété en préservant les domaines existants ; l’outil indique `requires_publish: true`. Les instructions de démarrage ont aussi été corrigées pour isoler les campagnes E2E de la base de travail.
+
+### Vérifications
+
+- Vitest : **158/158 réussis**, aucun skip : 86 géométrie/disposition/caméra, 27 noyau d’édition, 6 planification et 39 intégrations PostgreSQL réelles.
+- Typechecks et compilation web réussis. Aucune nouvelle dépendance. Le lot garde l’avertissement de taille du bundle 3D.
+- Trois nouveaux parcours Chromium passent : pose successive des cinq volumes génériques avec quatre pilotes ; plan sans toits ni segments supérieurs, bornes indépendantes et rotation après cadrage ; trame/filetages persistants et refus d’incompatibilité par le navigateur et l’API. Les trois parcours du lot de préparation précédent passent également.
+
+Point de retour avant ce lot : `3765b61`. Aucun déploiement chez un hébergeur n’est réalisé. Le besoin de notices et de profils fabricant vérifiés reste ouvert tant que l’accès réseau n’est pas effectif.
+
+Campagne complète de ce complément : **44/44 réussis en 3,9 min**, aucun skip, dont 12 parcours HTTP et 32 parcours navigateur Chromium/WebGL. Rapport complet conservé localement dans `.data/artifacts/plan-regression-full-report`.
+
+Les trois nouvelles régressions ont été rejouées avec succès après le réglage final des marges et le repli des paramètres avancés d’inserts. Captures finales : `docs/assets/poc-placement-controls.png` et `docs/assets/poc-plan-footprints.png`. Les trois salles de travail conservent révisions/placements 51/38, 20/38 et 3/10.

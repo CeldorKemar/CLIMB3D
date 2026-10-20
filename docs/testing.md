@@ -210,3 +210,12 @@ Les neuf tests de `packages/geometry/tests/support-preparation.test.ts` couvrent
 `tests/e2e/preparation.spec.ts` ajoute trois parcours Chromium : catalogue et autorisation des trous de pièce ; préparation/pose d’un dôme, annulation atomique et persistance ; prise vissée sur un exemplaire de volume préparé. Les scènes d’origine sont restaurées et seul le stock créé par le scénario est retiré. Les anciennes définitions ne sont pas réécrites pour assouplir les règles.
 
 Campagne navigateur finale de ce complément : **41/41 réussis en 3,3 min**, aucun skip, dont 12 parcours HTTP et 29 parcours Chromium avec WebGL. Les 38 scénarios précédents passent avec les trois nouveaux.
+
+
+## Régressions de pose et du plan
+
+`packages/geometry/tests/plan-camera.test.ts` vérifie les premiers pans, les niveaux, les toits, la trace de base et la verticale de caméra sur sept inclinaisons. La comparaison de filetages teste aussi un récepteur inconnu, un système différent et une désignation différente. Ces valeurs sont synthétiques.
+
+`tests/e2e/placement-plan-regression.spec.ts` reproduit les retours avec les profils génériques sans montage explicite des cinq volumes. Le parcours passe réellement du rouge au vert via les réglages de préparation, puis pose chaque forme. Les autres scénarios vérifient les bornes de la minimap indépendantes d’un toit distant, l’orbite après cadrage et la saisie/persistance de trame et filetages avec refus HTTP d’une incompatibilité. Les modèles de la fixture existante ne sont pas réécrits ; les nouveaux exemplaires sont retirés et la scène initiale restaurée.
+
+Campagne complète de ce complément : **44/44 réussis en 3,9 min**, aucun skip, dont 12 parcours HTTP et 32 parcours navigateur Chromium/WebGL. Rapport complet conservé localement dans `.data/artifacts/plan-regression-full-report`.

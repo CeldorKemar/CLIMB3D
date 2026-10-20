@@ -92,11 +92,24 @@ describe('authoritative mounting rules and migration', () => {
     const s = scene(), model = s.models.find(m => m.id === 'hold-crimp')!;
     model.mounting = { method: 'bolt', threadDesignation: 'example-A', holes: getMountingHoles(model) };
     s.walls[0]!.supportFixings = { allowScrews: false, holes: [{ id: 'a', position: [0, 1, 0], normal: [0, 0, 1], threadDesignation: 'example-B' }] };
-    expect(validatePlacementMounting(s, hold(s)).join(' ')).toContain('non aligné');
+    expect(validatePlacementMounting(s, hold(s)).join(' ')).toContain('Filetage');
     s.walls[0]!.supportFixings!.holes[0]!.threadDesignation = 'example-A';
     expect(validatePlacementMounting(s, hold(s))).toEqual([]);
     s.walls[0]!.supportFixings!.holes[0]!.normal = [0, 1, 0];
     expect(validatePlacementMounting(s, hold(s)).join(' ')).toContain('non aligné');
+  });
+  it('does not treat an unknown receiving thread or a different thread system as compatible with a declared bolt',()=>{
+    const s=scene(),model=s.models.find(m=>m.id==='hold-crimp')!;
+    model.mounting={method:'bolt',threadDesignation:'EXAMPLE X 1',threadSystem:'metric',holes:getMountingHoles(model)};
+    s.walls[0]!.supportFixings={allowScrews:false,holes:[{id:'receiver',kind:'insert',position:[0,1,0],normal:[0,0,1]}]};
+    expect(validatePlacementMounting(s,hold(s)).join(' ')).toContain('Filetage');
+    const receiver=s.walls[0]!.supportFixings!.holes[0]!;
+    receiver.threadDesignation='example × 1';receiver.threadSystem='imperial';
+    expect(validatePlacementMounting(s,hold(s)).join(' ')).toContain('Filetage');
+    receiver.threadSystem='metric';
+    expect(validatePlacementMounting(s,hold(s))).toEqual([]);
+    receiver.threadDesignation='example x 2';
+    expect(validatePlacementMounting(s,hold(s)).join(' ')).toContain('Filetage');
   });
   it('allows screw volumes only on permitted surface, with every own screw supported', () => {
     const s = scene(), p = { ...hold(s), modelId: 'volume-pyramid', position: [.03, 1.02, 0] as Vec3 };

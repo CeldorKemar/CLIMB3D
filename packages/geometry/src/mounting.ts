@@ -43,6 +43,7 @@ export function getSupportFixings(support: WallDefinition | ModelDefinition): Su
         holes.push({ id: `${kind}-${ix}-${iy}`, kind, position, normal: [0, 0, 1],
           ...(kind === 'insert' && support.fixing?.holeDiameterMm ? { diameter: support.fixing.holeDiameterMm / 1000 } : {}),
           ...(kind === 'insert' && support.fixing?.threadDesignation ? { threadDesignation: support.fixing.threadDesignation } : {}),
+          ...(kind === 'insert' && support.fixing?.threadSystem ? { threadSystem: support.fixing.threadSystem } : {}),
         });
       }
     };
@@ -73,8 +74,12 @@ function mountedPoint(placement: Placement, hole: MountingHole): Vector3 {
 function compatible(model: ModelDefinition, normal: Vector3, hole: SupportFixingHole, method = getMountingMethod(model)): boolean {
   if (method === 'screw' ? hole.kind !== 'pilot' : hole.kind === 'pilot') return false;
   const requiredThread = model.mounting?.threadDesignation ?? model.fixing?.threadDesignation;
-  return normal.dot(new Vector3(...hole.normal)) >= .999 &&
-    !(method === 'bolt' && requiredThread && hole.threadDesignation && requiredThread !== hole.threadDesignation);
+  const requiredSystem = model.mounting?.threadSystem ?? model.fixing?.threadSystem;
+  const designation = (value:string) => value.trim().toLowerCase().replace(/\s+/g,'').replaceAll('×','x');
+  return normal.dot(new Vector3(...hole.normal)) >= .999 && (method !== 'bolt' || (
+    (!requiredThread || (!!hole.threadDesignation && designation(requiredThread)===designation(hole.threadDesignation))) &&
+    (!requiredSystem || requiredSystem==='unknown' || requiredSystem===hole.threadSystem)
+  ));
 }
 export function nearestCompatibleHole(scene: SceneDocument, placement: Placement): SupportFixingHole | undefined {
   const model = scene.models.find(m => m.id === placement.modelId), support = supportFor(scene, placement);
@@ -108,7 +113,11 @@ export function validatePlacementMounting(scene: SceneDocument, placement: Place
       if (holeMethod === 'screw' && !fixings.allowScrews) { errors.push(`La fixation complémentaire ${hole.id} nécessite une zone de vissage autorisée : ${placement.id}`); continue; }
       const insert = fixings.holes.find(candidate => !occupied.has(candidate.id) && compatible(model, normal, candidate, holeMethod) &&
         point.distanceTo(new Vector3(...candidate.position)) <= MOUNTING_ALIGNMENT_EPSILON);
-      if (!insert) errors.push(`Trou ${hole.id} non aligné avec un ${holeMethod === 'screw' ? 'trou pilote' : 'insert'} compatible du support : ${placement.id}`);
+      if (!insert) {
+        const alignedInsert=holeMethod==='bolt'&&fixings.holes.find(candidate=>candidate.kind!=='pilot'&&!occupied.has(candidate.id)&&normal.dot(new Vector3(...candidate.normal))>=.999&&point.distanceTo(new Vector3(...candidate.position))<=MOUNTING_ALIGNMENT_EPSILON);
+        errors.push(alignedInsert?`Filetage ou système de l’insert ${alignedInsert.id} incompatible ou non renseigné pour le boulon ${hole.id} : ${placement.id}`:
+          `Trou ${hole.id} non aligné avec un ${holeMethod === 'screw' ? 'trou pilote' : 'insert'} compatible du support : ${placement.id}`);
+      }
       else occupied.add(insert.id);
     } else {
       if (!fixings.allowScrews) { errors.push(`La fixation complémentaire ${hole.id} nécessite une zone de vissage autorisée : ${placement.id}`); continue; }

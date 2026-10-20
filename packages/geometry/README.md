@@ -25,3 +25,10 @@ Les contours locaux de montage sont conservés dans un cache borné à 300 coupl
 Les validations de surface contrôlent l’ancrage et son orientation ; l’empreinte sur une surface courbe de volume n’est pas validée intégralement. Le contact avec le support direct est exempté afin de permettre le montage. Cela ne vérifie pas la résistance, la compatibilité d’un filetage ou la capacité mécanique d’une fixation. L’extension à des assets scannés utilisera une autre représentation de support versionnée ; les indices de triangles de ces géométries dérivées ne sont pas persistés.
 
 Vérifications depuis la racine : `npm run typecheck -w @climbed/geometry` et `npx vitest run packages/geometry/tests`.
+
+
+- `getPlanWalls(scene)` : premiers pans non horizontaux, par niveau, en détectant les arêtes complètes raccordées de bas en haut dans les documents existants. Les faces à moins de 5° de l’horizontale sont masquées par cette règle d’affichage ; ce seuil n’est pas une règle de fixation.
+- `projectWallBase(wall)` : trace X/Z de la base avec son épaisseur, sans projection de la hauteur ou du dévers. Le calcul `projectWallFootprint` reste disponible pour la géométrie générale et les dimensions du sol implicite.
+- `wallFocusPose(wall, aspect)` : cadrage utilisant toujours Y monde comme verticale, avec approche oblique d’une face horizontale pour éviter une direction parallèle à cette verticale.
+
+Les filetages déclarés sont comparés sans déduction de pas ni conversion d’unités. Une désignation ou un système explicitement requis exige une information réceptrice correspondante ; un point inconnu n’est plus une preuve de compatibilité. Les dimensions de démonstration restent inchangées.

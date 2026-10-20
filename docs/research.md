@@ -123,3 +123,8 @@ Aucune conclusion spécifique à un fabricant n’est possible sur un montage à
 Nouvelle tentative : Metolius (PDF candidat), Atomik, Escape, Cheeta, Bluepill et Entre-Prises ; refus HTTP 403, aucun contenu reçu. Le contrôle supplémentaire du PDF candidat Metolius renvoie également 403. Preuve locale : `.data/research/mounting-modes/responses.json`. Aucun extrait constructeur, nombre de vis facultatives ou diamètre pilote n’est vérifié.
 
 Le porteur du projet a autorisé la préparation du support et la modification des trous de la pièce lorsque son produit l’autorise. Le fonctionnement implémenté et ses limites figurent au dernier complément de [fixations.md](fixations.md). Les autorisations saisies restent des déclarations de l’utilisateur ; les modèles fournis restent synthétiques.
+
+
+## Recherche de standards et compatibilité entre marques
+
+La nouvelle demande est suivie dans [fabricants-compatibilite.md](fabricants-compatibilite.md). Huit destinations fabricant, AFNOR et une recherche sur EN 12572-3 restent bloquées au proxy avec HTTP 403 ; le témoin npm reçoit HTTP 200. Aucune notice ni norme n’a été lue. Le brouillon réseau a été complété, mais sa sauvegarde exige une publication avant toute nouvelle affirmation d’accès. Les dimensions existantes restent synthétiques. Le logiciel compare les caractéristiques déclarées sans supposer une compatibilité universelle entre marques.

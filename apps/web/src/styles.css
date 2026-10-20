@@ -1049,6 +1049,17 @@ button svg {
 .mounting-hole-editor > p { margin: 8px 0; }
 .mounting-hole-editor fieldset { border: 0; padding: 0; min-width: 0; }
 .mounting-hole-row { padding: 12px 0; border-top: 1px solid #d8dfd3; }
+.placement-controls { line-height: 1.6; font-size: 12px; padding: 0 18px 18px; box-sizing: border-box; }
+.placement-controls .inspector-title { padding-left: 0; padding-right: 0; }
+.placement-controls select { width: 100%; border: 1px solid #d4ddce; background: #fff; border-radius: 5px; padding: 8px; color: #35493e; font: inherit; }
+.placement-controls .text-field input { box-sizing: border-box; }
+.placement-controls > p { margin: 12px 0; }
+.placement-controls .text-field { margin: 14px 0; }
+.placement-check { display: flex; align-items: flex-start; gap: 8px; padding: 12px 0; }
+.placement-check input { margin-top: 4px; flex-shrink: 0; }
+.placement-check input { accent-color: #2d674f; }
+.property-section summary { cursor: pointer; font-weight: 600; }
+.placement-help { background: #edf2e6; border-left: 3px solid #749956; padding: 10px; border-radius: 4px; color: #354e28; }
 .placement-hint .status-dot {
   background: #c3e195;
 }

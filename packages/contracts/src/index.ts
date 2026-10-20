@@ -53,6 +53,7 @@ export const mountingSchema = z.object({
   screwPlacement: z.enum(['pre_drilled', 'direct']).optional(),
   holes: z.array(mountingHoleSchema).min(1).max(30),
   threadDesignation: z.string().min(1).max(80).optional(),
+  threadSystem: z.enum(['metric','imperial','unknown']).optional(),
   modificationAuthorization: z.object({ reference: z.string().trim().min(5).max(300) }).strict().optional(),
 }).strict();
 export type ModelMounting = z.infer<typeof mountingSchema>;
@@ -63,6 +64,7 @@ export const supportFixingHoleSchema = z.object({
   normal: vector3Schema.refine(v => Math.abs(Math.hypot(...v) - 1) < 0.001, 'Normale de fixation non normalisée'),
   diameter: z.number().finite().min(0.001).max(0.1).optional(),
   threadDesignation: z.string().min(1).max(80).optional(),
+  threadSystem: z.enum(['metric','imperial','unknown']).optional(),
 }).strict();
 export type SupportFixingHole = z.infer<typeof supportFixingHoleSchema>;
 export const supportFixingsSchema = z.object({

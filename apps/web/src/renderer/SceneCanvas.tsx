@@ -30,6 +30,7 @@ import {
   getPlacementModel,
   prepareSupportForPlacement,
   snapPlacementAnchorToFixing,
+  wallFocusPose,
 } from "@climbed/geometry";
 export interface SurfacePoint {
   parentType: "wall" | "volume";
@@ -42,6 +43,7 @@ export type ViewMode = "perspective" | "front" | "top";
 export interface PlacementPreviewStatus {
   valid: boolean;
   reasons: string[];
+  support: Pick<SurfacePoint,'parentType'|'parentId'>;
 }
 interface Props {
   scene: SceneDocument;
@@ -132,20 +134,9 @@ function Camera({ view, scene }: Pick<Props, "view" | "scene">) {
     let target = view.mode === "front" ? new Vector3(1, 2, 0) : centre;
     camera.up.set(0, 1, 0);
     if (focusWall) {
-      const q = new Quaternion(...focusWall.rotation);
-      target = new Vector3(0, focusWall.height / 2, 0)
-        .applyQuaternion(q)
-        .add(new Vector3(...focusWall.position));
-      const focusDistance =
-        (Math.max(focusWall.width / aspect, focusWall.height, 1) /
-          (2 * Math.tan((21 * Math.PI) / 180))) *
-        1.3;
-      camera.position
-        .copy(target)
-        .add(
-          new Vector3(0, 0, 1).applyQuaternion(q).multiplyScalar(focusDistance),
-        );
-      camera.up.copy(new Vector3(0, 1, 0).applyQuaternion(q));
+      const pose = wallFocusPose(focusWall,aspect);
+      target.set(...pose.target);
+      camera.position.set(...pose.position);
     } else if (view.mode === "front") camera.position.set(1, 2, 12);
     else if (view.mode === "top") {
       camera.position.set(
@@ -311,7 +302,7 @@ export function SceneCanvas(props: Props) {
   }, [scene, activeModel, hover, props.remainingStock, props.prepareSupport, props.pilotDiameter]);
   useEffect(() => {
     previewCallback.current?.(
-      preview ? { valid: preview.valid, reasons: preview.reasons } : null,
+      preview ? { valid: preview.valid, reasons: preview.reasons, support:{parentType:preview.candidate.parentType,parentId:preview.candidate.parentId} } : null,
     );
   }, [preview]);
   const visibleIds = useMemo(

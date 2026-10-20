@@ -14,6 +14,7 @@ import { perforateGeometry } from './perforation';
 import { validateRoomLayout } from './layout';
 export * from './mounting';
 export * from './layout';
+export * from './camera';
 export { COLLISION_EPSILON, type CollisionPair } from './collisions';
 
 /** Numerical tolerance in metres; this is not a mechanical clearance. */

@@ -15,7 +15,7 @@ Le dépôt technique conserve le nom `CLIMB3D`. Le nom produit retenu dans les �
 
 [Capture réelle du POC dans Chromium](docs/assets/poc-editor.png) : trois pans, cinq volumes et trente-trois prises, dont une fixée sur un volume.
 
-[Aperçu de l’éditeur de catalogue](docs/assets/poc-catalog.png) · [Plan et panneau des niveaux](docs/assets/poc-levels.png) · [Pyramide à inserts de démonstration](docs/assets/poc-pyramid.png).
+[Aperçu de l’éditeur de catalogue](docs/assets/poc-catalog.png) · [Plan et panneau des niveaux](docs/assets/poc-levels.png) · [Pyramide à inserts de démonstration](docs/assets/poc-pyramid.png) · [Réglages de pose](docs/assets/poc-placement-controls.png) · [Plan limité aux pieds de murs](docs/assets/poc-plan-footprints.png).
 
 | Document | Objet |
 | --- | --- |
@@ -26,6 +26,7 @@ Le dépôt technique conserve le nom `CLIMB3D`. Le nom produit retenu dans les �
 | [Décisions](docs/decisions.md) | Distinction entre décisions métier validées et propositions techniques. |
 | [Tests](docs/testing.md) | Scénarios et critères de validation à implémenter. |
 | [Recherche](docs/research.md) | Sources consultées, versions observées et limites documentaires. |
+| [Compatibilité des fixations](docs/fabricants-compatibilite.md) | État des recherches fabricant, interfaces et règles réellement implémentées. |
 | [Avancement](docs/progress.md) | Travail réalisé et validations attendues. |
 | [Hébergement et évolutions](docs/hosting.md) | Déploiement simple, paiement futur et changements réversibles. |
 | [Mise à jour sous Windows](docs/update-windows.md) | Télécharger une nouvelle version en conservant PostgreSQL et les salles. |
@@ -63,7 +64,7 @@ Sur une sélection de salle : **Suppr** ou **Retour arrière** supprime, **Ctrl+
 
 **Ctrl + clic gauche** sélectionne plusieurs prises ou volumes ; le panneau propose alors uniquement leur suppression groupée, annulable. La suppression d’une voie propose aussi de retirer ses pièces exclusives, en conservant les pièces partagées et les supports nécessaires.
 
-Le **plan de la salle**, en bas à droite, affiche les pans à leurs coordonnées réelles en vue du dessus. Il se masque, s’agrandit et permet de cadrer un pan en cliquant dessus. Le menu **Niveaux** permet de définir les sols, leurs altitudes, les pans associés et des escaliers droits. Les niveaux font partie de la sauvegarde de salle. Le plan affiche uniquement les pans, sans sols ni escaliers.
+Le **plan de la salle**, en bas à droite, affiche les pieds de murs à leurs coordonnées réelles en vue du dessus. Les toits sont masqués. Pour un profil raccordé de bas en haut, seul le premier pan est représenté ; son dévers n’est pas projeté en une grande surface sur le plan. Le cadrage conserve la verticale de la salle. Il se masque, s’agrandit et permet de cadrer un pan en cliquant dessus. Le menu **Niveaux** permet de définir les sols, leurs altitudes, les pans associés et des escaliers droits. Les niveaux font partie de la sauvegarde de salle. Le plan affiche uniquement les pans, sans sols ni escaliers.
 
 Les prises et volumes de démonstration possèdent des trous traversants. L’aperçu devient vert lorsque le placement est accepté, rouge avec les raisons du refus. Les objets boulonnés s’accrochent aux inserts compatibles ; les objets vissés exigent par défaut des trous pilotes compatibles. Tous les trous du modèle sont obligatoires. Le vissage direct doit être explicitement autorisé dans son profil et par son support. La même validation s’applique côté serveur. Voir [les fixations](docs/fixations.md) pour les données et limites des exemples.
 
@@ -73,9 +74,11 @@ Dans le catalogue, les boutons **Pyramide à inserts · démo** et **Dôme à 4 
 
 Dans le catalogue, **Mode de fixation** propose boulons sur inserts, vis sur pilotes et vissage direct. Ces modes existent pour les prises et les volumes. Les trous de la pièce sont conservés quand on change de mode.
 
-Pour préparer un support : le sélectionner, activer **Autoriser le préperçage de ce support** si le produit le permet, puis choisir une pièce, cocher **Préparer les trous pilotes puis placer** et saisir le diamètre pilote en millimètres. L’aperçu affiche les trous à préparer. Le clic ajoute les trous et la pièce ensemble ; une seule annulation retire cette opération. Sur un volume, seuls les trous de cet exemplaire sont modifiés. Une interdiction du profil produit bloque la préparation.
+Pour préparer un support : choisir une pièce ; le panneau **Réglages de pose** apparaît à droite. Choisir ou survoler le support, cocher **Préparer le support puis poser**, déclarer que le produit et le matériau l’autorisent, puis saisir le diamètre pilote en millimètres. Les propriétés d’un support permettent aussi de renseigner cette permission. L’aperçu affiche les trous à préparer. Le clic ajoute les trous et la pièce ensemble ; une seule annulation retire cette opération. Sur un volume, seuls les trous de cet exemplaire sont modifiés. Une interdiction du profil produit bloque la préparation.
 
 Pour modifier les trous de la pièce elle-même : ouvrir l’éditeur de catalogue, dupliquer le modèle s’il possède du stock ou des placements, puis renseigner **Référence autorisant la modification**. On peut alors ajouter, déplacer, dimensionner ou supprimer ses trous de fixation et préciser leur rôle. La référence est une déclaration de l’utilisateur, sans vérification documentaire automatique. Les vérifications géométriques restent actives. Le diamètre du pilote dans le support se renseigne séparément du diamètre de passage de la pièce.
+
+Les propriétés du pan permettent de renseigner **Pas inserts X/Y**, les décalages, la rotation, la désignation et le système de filetage de la trame réelle. Dans le catalogue, une pièce boulonnée peut déclarer son filetage. Si elle exige une désignation ou un système, un insert inconnu ou différent est refusé. Ces champs ne sont pas préremplis avec des spécifications fabricant supposées.
 
 Les profils de fixation sont génériques et non certifiés ; aucun résultat du logiciel ne valide mécaniquement une installation réelle.
 

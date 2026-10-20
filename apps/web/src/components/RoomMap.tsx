@@ -3,7 +3,8 @@ import type { SceneDocument } from "@climbed/contracts";
 import {
   getRoomLevels,
   getWallLevelId,
-  projectWallFootprint,
+  projectWallBase,
+  getPlanWalls,
 } from "@climbed/geometry";
 import { ChevronDown, ChevronUp, Expand, Map, Minimize2 } from "lucide-react";
 import "./layout.css";
@@ -59,12 +60,12 @@ export function RoomMap({ scene, onFocusWall, selectedWallId }: RoomMapProps) {
   }, [full]);
   const levels = getRoomLevels(scene);
   const activeLevelId = levels.some((l) => l.id === levelId) ? levelId : "all";
-  const walls = scene.walls.filter(
+  const walls = getPlanWalls(scene).filter(
     (w) =>
       activeLevelId === "all" || getWallLevelId(scene, w) === activeLevelId,
   );
   const bounds = useMemo(() => {
-    const projected = walls.flatMap(projectWallFootprint);
+    const projected = walls.flatMap(projectWallBase);
     const points: [number, number][] = projected.length ? projected : [[-.5, -.5], [.5, .5]];
     const xs = points.map((p) => p[0]),
       zs = points.map((p) => p[1]);
@@ -147,7 +148,7 @@ export function RoomMap({ scene, onFocusWall, selectedWallId }: RoomMapProps) {
             preserveAspectRatio="xMidYMid meet"
           >
             {walls.map((w) => {
-              const p = projectWallFootprint(w),
+              const p = projectWallBase(w),
                 selected = w.id === selectedWallId;
               return (
                 <g
@@ -185,8 +186,9 @@ export function RoomMap({ scene, onFocusWall, selectedWallId }: RoomMapProps) {
               );
             })}
           </svg>
+          {!walls.length && <p className="room-map-hint">Aucun pied de mur à afficher à ce niveau.</p>}
           <p className="room-map-hint">
-            Cliquer sur un pan pour le cadrer en 3D.
+            Pieds de murs uniquement · cliquer pour cadrer. Toits masqués.
           </p>
         </>
       )}

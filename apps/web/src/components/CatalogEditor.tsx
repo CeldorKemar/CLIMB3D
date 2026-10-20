@@ -319,6 +319,21 @@ export function CatalogEditor({
                   </select>
                 </label>
                 <p className="small-muted">Le mode conserve les trous prévus sur la pièce. Il s’applique aux prises comme aux volumes ; le support doit autoriser la fixation choisie.</p>
+                {getMountingMethod(draft)==='bolt'&&<>
+                  <label className="text-field">Filetage des boulons
+                    <input aria-label="Filetage des boulons" maxLength={80} placeholder="Désignation complète à relever"
+                      value={draft.mounting?.threadDesignation??draft.fixing?.threadDesignation??''}
+                      onChange={e=>setDraft({...draft,fixing:draft.fixing?{...draft.fixing,threadDesignation:undefined}:undefined,
+                        mounting:{...draft.mounting,method:'bolt',holes:getMountingHoles(draft),threadDesignation:e.target.value||undefined}})}/>
+                  </label>
+                  <label className="text-field">Système des boulons
+                    <select aria-label="Système des boulons" value={draft.mounting?.threadSystem??draft.fixing?.threadSystem??'unknown'}
+                      onChange={e=>setDraft({...draft,mounting:{...draft.mounting,method:'bolt',holes:getMountingHoles(draft),threadSystem:e.target.value as 'unknown'|'metric'|'imperial'}})}>
+                      <option value="unknown">Non renseigné</option><option value="metric">Métrique</option><option value="imperial">Impérial</option>
+                    </select>
+                  </label>
+                  <p className="small-muted">Si un filetage ou un système est exigé, l’insert doit le renseigner et correspondre. Le logiciel ne déduit pas le pas depuis un diamètre.</p>
+                </>}
                 {draft.kind === 'volume' && <>
                   <label className="text-field">Réception de prises vissées
                     <select aria-label="Réception de prises vissées" value={getSupportFixings(draft).allowScrews ? 'yes' : 'no'} onChange={e => setDraft({...draft, supportFixings:{...getSupportFixings(draft), allowScrews:e.target.value==='yes'}})}>
