@@ -1,3 +1,4 @@
+import { directScrewScene } from './fixtures';
 import { describe, expect, it } from 'vitest';
 import { createDemoScene, type ModelDefinition, type Placement, type SceneDocument } from '@climbed/contracts';
 import { Matrix4, Vector3 } from 'three';
@@ -12,9 +13,9 @@ const model: ModelDefinition = {
   dimensions: [1, 1, .5], color: '#ffffff', source: { type: 'parametric', generatorVersion: 1 },
 };
 function scene(): SceneDocument {
-  const result = createDemoScene();
+  const result = directScrewScene(createDemoScene());
   result.walls = [{ ...result.walls[0]!, id: 'wall', width: 8, height: 6, position: [0, 0, 0], rotation: [0, 0, 0, 1], openings: [] }];
-  result.models = [structuredClone(model), { ...structuredClone(model), id: 'hold', kind: 'hold', dimensions: [.2, .2, .1] }];
+  result.models = [directScrewScene({ ...result, models: [model] }).models[0]!, { ...structuredClone(model), id: 'hold', kind: 'hold', dimensions: [.2, .2, .1] }];
   result.placements = []; result.boulders = [];
   return result;
 }

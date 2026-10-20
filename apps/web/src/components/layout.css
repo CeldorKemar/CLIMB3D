@@ -278,3 +278,14 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+.structure-move { position: absolute; left: 65px; bottom: 65px; z-index: 4; width: 180px; padding: 12px; background: #fafbf7f5; border: 1px solid #c9d4cd; border-radius: 10px; color: #35493e; font-size: 12px; }
+.structure-move strong { display: block; margin-bottom: 8px; }
+.structure-move label { display: flex; justify-content: space-between; align-items: center; }
+.structure-move select { max-width: 100px; }
+.structure-move-axes { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 8px 0; }
+.structure-move button { padding: 5px; border: 1px solid #b8c8be; border-radius: 5px; background: white; color: #254f3c; cursor: pointer; }
+.structure-move button:hover { background: #dfeddf; }
+.structure-move small { line-height: 1.5; font-size: 10px; }
+.catalog-example-buttons { display: grid; gap: 6px; padding: 12px 0; }
+.catalog-example-buttons p { font-size: 11px; color: #637369; margin: 0; }
+.catalog-example-buttons button { font-size: 11px; padding: 8px; }

@@ -1,4 +1,4 @@
-import type { SceneDocument, WallDefinition } from "@climbed/contracts";
+import type { SceneDocument, WallDefinition, Vec3 } from "@climbed/contracts";
 import { Quaternion, Vector3 } from "three";
 
 export type RoomLevel = NonNullable<SceneDocument["levels"]>[number];
@@ -122,6 +122,23 @@ export function assignWallLevel(
       };
     }),
   };
+}
+
+/** Global axes: moving a floor horizontally edits its outline; its elevation carries attached panels. */
+export function translateStructure(scene: SceneDocument, target: { kind: "wall" | "level"; id: string }, delta: Vec3): SceneDocument {
+  if (delta.some(n => !Number.isFinite(n))) return scene;
+  if (target.kind === "wall") {
+    if (!scene.walls.some(w => w.id === target.id)) return scene;
+    return { ...scene, walls: scene.walls.map(w => w.id === target.id ? {
+      ...w, position: w.position.map((n, i) => n + delta[i]!) as Vec3,
+    } : w) };
+  }
+  const level = getRoomLevels(scene).find(l => l.id === target.id);
+  if (!level) return scene;
+  const current = changeLevelElevation(scene, level.id, level.elevation + delta[1]);
+  return { ...current, levels: current.levels!.map(l => l.id === level.id ? {
+    ...l, outline: l.outline.map(([x, z]) => [x + delta[0], z + delta[2]] as PlanPoint),
+  } : l) };
 }
 
 export interface StairStep {

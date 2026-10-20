@@ -15,7 +15,7 @@ Le dépôt technique conserve le nom `CLIMB3D`. Le nom produit retenu dans les �
 
 [Capture réelle du POC dans Chromium](docs/assets/poc-editor.png) : trois pans, cinq volumes et trente-trois prises, dont une fixée sur un volume.
 
-[Aperçu de l’éditeur de catalogue](docs/assets/poc-catalog.png) · [Plan et panneau des niveaux](docs/assets/poc-levels.png).
+[Aperçu de l’éditeur de catalogue](docs/assets/poc-catalog.png) · [Plan et panneau des niveaux](docs/assets/poc-levels.png) · [Pyramide à inserts de démonstration](docs/assets/poc-pyramid.png).
 
 | Document | Objet |
 | --- | --- |
@@ -63,9 +63,13 @@ Sur une sélection de salle : **Suppr** ou **Retour arrière** supprime, **Ctrl+
 
 **Ctrl + clic gauche** sélectionne plusieurs prises ou volumes ; le panneau propose alors uniquement leur suppression groupée, annulable. La suppression d’une voie propose aussi de retirer ses pièces exclusives, en conservant les pièces partagées et les supports nécessaires.
 
-Le **plan de la salle**, en bas à droite, affiche les pans à leurs coordonnées réelles en vue du dessus. Il se masque, s’agrandit et permet de cadrer un pan en cliquant dessus. Le menu **Niveaux** permet de définir les sols, leurs altitudes, les pans associés et des escaliers droits. Les niveaux font partie de la sauvegarde de salle.
+Le **plan de la salle**, en bas à droite, affiche les pans à leurs coordonnées réelles en vue du dessus. Il se masque, s’agrandit et permet de cadrer un pan en cliquant dessus. Le menu **Niveaux** permet de définir les sols, leurs altitudes, les pans associés et des escaliers droits. Les niveaux font partie de la sauvegarde de salle. Le plan affiche uniquement les pans, sans sols ni escaliers.
 
-Les prises et volumes de démonstration possèdent des trous traversants. L’aperçu devient vert lorsque le placement est accepté, rouge avec les raisons du refus. Les objets boulonnés s’accrochent aux inserts compatibles ; les objets vissés utilisent leurs propres trous dans une surface autorisée. La même validation s’applique côté serveur. Voir [les fixations](docs/fixations.md) pour les données et limites des exemples.
+Les prises et volumes de démonstration possèdent des trous traversants. L’aperçu devient vert lorsque le placement est accepté, rouge avec les raisons du refus. Les objets boulonnés s’accrochent aux inserts compatibles ; les objets vissés exigent par défaut des trous pilotes compatibles. Tous les trous du modèle sont obligatoires. Le vissage direct doit être explicitement autorisé dans son profil et par son support. La même validation s’applique côté serveur. Voir [les fixations](docs/fixations.md) pour les données et limites des exemples.
+
+Sélectionner un pan ou un sol pour afficher les boutons **X−/X+, Y−/Y+, Z−/Z+**. Les flèches agissent sur X/Y, **Alt + haut/bas** sur Z, **Maj** multiplie le pas par dix. Un sol se sélectionne aussi dans le panneau des niveaux. Son déplacement vertical transporte ses pans ; son déplacement horizontal déplace uniquement son contour. Les opérations se sauvegardent et s’annulent dans le brouillon.
+
+Dans le catalogue, les boutons **Pyramide à inserts · démo** et **Dôme à 4 boulons · démo** ajoutent des profils synthétiques distincts. La pyramide reçoit des prises sur ses quatre inserts inclinés. Déclarer leur stock avant placement. Pour un volume vissé sur un support prépercé, renseigner la trame de trous pilotes dans les propriétés du pan ; les marqueurs orange sont distincts des inserts. Un modèle déjà inventorié doit être dupliqué pour changer son profil.
 
 Les profils de fixation sont génériques et non certifiés ; aucun résultat du logiciel ne valide mécaniquement une installation réelle.
 

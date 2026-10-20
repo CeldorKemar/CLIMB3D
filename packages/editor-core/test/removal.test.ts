@@ -1,9 +1,10 @@
+import { directScrewScene } from '../../geometry/tests/fixtures';
 import { describe, expect, it } from 'vitest';
 import { createDemoScene, type SceneDocument } from '@climbed/contracts';
 import { applyCommand, commitScene, createHistory, planRouteRemoval, redoHistory, removeRouteWithPlacements, removeSelection, undoHistory } from '../src/index';
 
 function fixture(): SceneDocument {
-  const scene = createDemoScene();
+  const scene = directScrewScene(createDemoScene());
   scene.walls = [{ ...scene.walls[0]!, width: 8, height: 4, position: [0, 0, 0], rotation: [0, 0, 0, 1], openings: [] }];
   scene.placements = [
     { id: 'volume', modelId: 'volume-box', modelVersion: 1, parentType: 'wall', parentId: 'wall-main', position: [-2, 1, 0], rotation: [0, 0, 0, 1] },

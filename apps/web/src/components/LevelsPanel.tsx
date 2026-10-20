@@ -17,6 +17,8 @@ export interface LevelsPanelProps {
   scene: SceneDocument;
   onChange: (scene: SceneDocument) => void;
   selectedWallId?: string;
+  selectedLevelId?: string | null;
+  onSelectLevel?: (id: string) => void;
 }
 
 function floorBounds(level: RoomLevel) {
@@ -59,6 +61,8 @@ export function LevelsPanel({
   scene,
   onChange,
   selectedWallId,
+  selectedLevelId,
+  onSelectLevel,
 }: LevelsPanelProps) {
   const levels = getRoomLevels(scene),
     stairs = scene.stairs ?? [],
@@ -228,6 +232,10 @@ export function LevelsPanel({
                 Supprimer
               </button>
             </div>
+            <button className="layout-action" type="button" aria-pressed={selectedLevelId === level.id}
+              onClick={() => onSelectLevel?.(level.id)} aria-label={`Sélectionner le sol ${level.name}`}>
+              {selectedLevelId === level.id ? "Sol sélectionné · déplacement actif" : "Sélectionner et déplacer ce sol"}
+            </button>
             <div className="level-fields">
               <NumberField
                 label={`Altitude ${level.name}`}

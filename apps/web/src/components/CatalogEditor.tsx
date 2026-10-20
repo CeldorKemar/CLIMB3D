@@ -16,7 +16,8 @@ import type {
   ShapeKind,
   Vec3,
 } from "@climbed/contracts";
-import { modelSchema } from "@climbed/contracts";
+import { modelSchema, createMountingExample } from "@climbed/contracts";
+import { getMountingHoles, getMountingMethod } from "@climbed/geometry";
 import type { Edit } from "../domain/editor";
 import { NumberField } from "./Fields";
 import { ShapeThumbnail } from "./LibraryPanel";
@@ -109,6 +110,11 @@ export function CatalogEditor({
     setSearch("");
     setSelectedId(next.id);
   }
+  function example(shape: 'pyramid' | 'dome') {
+    const model = createMountingExample(shape, crypto.randomUUID());
+    edit(d => d.models.push(model));
+    setKind('volume'); setSearch(''); setSelectedId(model.id);
+  }
   function apply() {
     if (!draft || locked) return;
     const checked = modelSchema.safeParse(draft);
@@ -167,6 +173,11 @@ export function CatalogEditor({
               <Plus size={14} />
               Volume
             </button>
+          </div>
+          <div className="catalog-example-buttons">
+            <p>Exemples synthétiques, à déclarer en stock pour les essayer.</p>
+            <button className="secondary" data-testid="catalog-example-pyramid" onClick={() => example('pyramid')}>Pyramide à inserts · démo</button>
+            <button className="secondary" data-testid="catalog-example-dome" onClick={() => example('dome')}>Dôme à 4 boulons · démo</button>
           </div>
           <div
             className="segmented catalog-category-tabs"
@@ -296,6 +307,15 @@ export function CatalogEditor({
                 </div>
               )}
               <fieldset disabled={locked}>
+                <p className="small-muted">{getMountingHoles(draft).length} fixations obligatoires · {getMountingMethod(draft) === 'bolt' ? 'boulonnage sur inserts' : draft.mounting?.screwPlacement === 'direct' ? 'vissage direct autorisé' : 'vissage sur trous pilotes'}.</p>
+                {getMountingMethod(draft) === 'screw' && <label className="text-field">Placement des vis
+                  <select aria-label="Placement des vis" value={draft.mounting?.screwPlacement ?? 'pre_drilled'} onChange={event => setDraft({ ...draft, mounting: {
+                    ...draft.mounting, method: 'screw', holes: getMountingHoles(draft), screwPlacement: event.target.value as 'direct' | 'pre_drilled',
+                  } })}>
+                    <option value="pre_drilled">Tous les trous alignés sur des trous pilotes</option>
+                    <option value="direct">Vissage direct sur surface autorisée</option>
+                  </select>
+                </label>}
                 <label className="text-field">
                   Nom
                   <input

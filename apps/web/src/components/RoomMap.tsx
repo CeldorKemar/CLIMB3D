@@ -59,24 +59,19 @@ export function RoomMap({ scene, onFocusWall, selectedWallId }: RoomMapProps) {
   }, [full]);
   const levels = getRoomLevels(scene);
   const activeLevelId = levels.some((l) => l.id === levelId) ? levelId : "all";
-  const visibleLevels = levels.filter(
-    (l) => activeLevelId === "all" || activeLevelId === l.id,
-  );
   const walls = scene.walls.filter(
     (w) =>
       activeLevelId === "all" || getWallLevelId(scene, w) === activeLevelId,
   );
   const bounds = useMemo(() => {
-    const points = [
-      ...visibleLevels.flatMap((l) => l.outline),
-      ...walls.flatMap(projectWallFootprint),
-    ];
+    const projected = walls.flatMap(projectWallFootprint);
+    const points: [number, number][] = projected.length ? projected : [[-.5, -.5], [.5, .5]];
     const xs = points.map((p) => p[0]),
       zs = points.map((p) => p[1]);
-    const minX = Math.min(-0.5, ...xs),
-      maxX = Math.max(0.5, ...xs),
-      minZ = Math.min(-0.5, ...zs),
-      maxZ = Math.max(0.5, ...zs);
+    const minX = Math.min(...xs),
+      maxX = Math.max(...xs),
+      minZ = Math.min(...zs),
+      maxZ = Math.max(...zs);
     const pad = Math.max(maxX - minX, maxZ - minZ) * 0.08;
     return {
       x: minX - pad,
@@ -151,68 +146,6 @@ export function RoomMap({ scene, onFocusWall, selectedWallId }: RoomMapProps) {
             aria-label="Vue du dessus des pans de la salle"
             preserveAspectRatio="xMidYMid meet"
           >
-            {visibleLevels.map((l, i) => (
-              <polygon
-                key={l.id}
-                points={l.outline.map((p) => p.join(",")).join(" ")}
-                fill={i % 2 ? "#b5c5d322" : "#d9dfd580"}
-                stroke="#95a39c"
-                strokeWidth={unit * 0.3}
-                strokeDasharray={`${unit} ${unit}`}
-              >
-                <title>
-                  {l.name}, sol à {l.elevation} m
-                </title>
-              </polygon>
-            ))}
-            {(scene.stairs ?? [])
-              .filter(
-                (s) =>
-                  activeLevelId === "all" ||
-                  s.fromLevelId === activeLevelId ||
-                  s.toLevelId === activeLevelId,
-              )
-              .map((s) => {
-                const dx = s.end[0] - s.start[0],
-                  dz = s.end[1] - s.start[1],
-                  length = Math.hypot(dx, dz) || 1;
-                const nx = ((-dz / length) * s.width) / 2,
-                  nz = ((dx / length) * s.width) / 2;
-                const points = [
-                  [s.start[0] + nx, s.start[1] + nz],
-                  [s.start[0] - nx, s.start[1] - nz],
-                  [s.end[0] - nx, s.end[1] - nz],
-                  [s.end[0] + nx, s.end[1] + nz],
-                ];
-                return (
-                  <g key={s.id}>
-                    <polygon
-                      points={points.map((p) => p.join(",")).join(" ")}
-                      fill="#d4b990"
-                      stroke="#9d835e"
-                      strokeWidth={unit * 0.35}
-                    />
-                    <title>{s.name}</title>
-                    {Array.from(
-                      { length: Math.min(s.steps ?? 12, 30) },
-                      (_, i) => {
-                        const t = (i + 1) / (Math.min(s.steps ?? 12, 30) + 1);
-                        return (
-                          <line
-                            key={i}
-                            x1={s.start[0] + dx * t + nx}
-                            y1={s.start[1] + dz * t + nz}
-                            x2={s.start[0] + dx * t - nx}
-                            y2={s.start[1] + dz * t - nz}
-                            stroke="#9d835e"
-                            strokeWidth={unit * 0.25}
-                          />
-                        );
-                      },
-                    )}
-                  </g>
-                );
-              })}
             {walls.map((w) => {
               const p = projectWallFootprint(w),
                 selected = w.id === selectedWallId;

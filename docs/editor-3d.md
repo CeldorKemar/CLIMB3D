@@ -177,3 +177,11 @@ Les sols sont des contours finis extrudés à leur altitude. L’interface actue
 Ctrl + clic constitue une sélection multiple de pièces. Les commandes de transformation et de copie sont masquées ou ignorées lorsqu’elle comporte plusieurs éléments ; la suppression groupe les descendants et nettoie toutes les références de voies. La sélection et le cadrage ne créent aucune révision métier.
 
 Les modèles paramétriques sont perforés selon leurs trous propres et les inserts récepteurs déclarés. Les perçages retirent réellement de la matière, avec un cache borné de géométries. Les inserts de pans utilisent des marqueurs, pour éviter des milliers de perçages détaillés. L’aperçu fluorescent vert ou rouge et le clic partagent les mêmes règles d’alignement et de collision que l’API ; les raisons sont visibles dans la scène.
+
+## Déplacement de structure et minimap épurée
+
+La sélection d’un pan propose six boutons X−/X+, Y−/Y+, Z−/Z+ et un pas de 0,01, 0,1, 0,5 ou 1 m. Les flèches déplacent sur X/Y dans le repère global ; Alt + haut/bas agit sur Z et Maj multiplie le pas par dix. Les champs de saisie, dialogues, catalogue et commandes du plan conservent leurs interactions propres. Une sélection multiple de pièces n’active pas ces transformations.
+
+Un sol se sélectionne dans le panneau des niveaux ou en cliquant sa surface dans la scène, hors outil de placement. Un déplacement X/Z translate son contour uniquement ; un déplacement Y change l’altitude du niveau et transporte ses pans associés avec leurs enfants. Les escaliers recalculent leurs hauteurs ; leurs extrémités XZ restent des coordonnées explicites. Toutes ces opérations utilisent l’historique et les validations de l’éditeur.
+
+La minimap ne dessine et ne cadre désormais que les pans. Les sols et escaliers ne sont plus affichés et leurs dimensions ne modifient plus l’échelle du plan. Le filtre de niveau, le clic pour cadrer un pan et l’agrandissement restent disponibles.

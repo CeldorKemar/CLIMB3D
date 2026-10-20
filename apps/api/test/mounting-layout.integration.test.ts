@@ -1,11 +1,13 @@
+import { getMountingHoles } from '@climbed/geometry';
 import { beforeAll, beforeEach, afterAll, describe, expect, it } from 'vitest';
 import { Pool } from 'pg';
 import type { SceneDocument } from '@climbed/contracts';
 import { databaseUrl } from '../src/config.ts';
 import { migrate } from '../src/migrate.ts';
-import { seed, fixtures } from '../src/seed.ts';
+import { fixtures } from '../src/seed.ts';
 import { PostgresRepository, type AuthSession } from '../src/repository.ts';
 import { testScene, wallPlacement } from './fixtures.ts';
+import { seedTestFixtures } from './fixtures.ts';
 
 const testUrl = process.env.TEST_DATABASE_URL;
 describe.skipIf(!testUrl)('PostgreSQL : fixations autoritaires et compatibilité des salles existantes', () => {
@@ -19,7 +21,7 @@ describe.skipIf(!testUrl)('PostgreSQL : fixations autoritaires et compatibilité
   });
   beforeEach(async () => {
     await pool.query('TRUNCATE organizations,app_users,rooms,room_access,sessions,scene_versions,stock_items,reservations,occupations,idempotency,audit_events CASCADE');
-    await seed(pool);
+    await seedTestFixtures(pool);
     alice = await repository.session((await repository.login('alice@climbed.local', 'climbed-local-demo')).token);
   });
   afterAll(async () => { await pool?.end(); });
@@ -75,4 +77,21 @@ describe.skipIf(!testUrl)('PostgreSQL : fixations autoritaires et compatibilité
     expect(after.scene).toEqual(prepared.scene);
     expect(after.revision).toBe(prepared.revision);
   });
+  it('refuse un dôme hors des quatre trous pilotes ou avec seulement deux fixations, sans écriture partielle', async () => {
+    const scene = testScene(), source = scene.models.find(m => m.id === 'volume-dome')!;
+    const model = { ...source, id: 'strict-dome', mounting: { method: 'screw' as const, holes: getMountingHoles(source) } };
+    scene.models.push(model);
+    const holes = model.mounting.holes.map(h => ({id: h.id, kind: 'pilot' as const, position: [h.position[0], h.position[1] + 1, 0] as [number,number,number], normal: [0,0,1] as [number,number,number]}));
+    scene.walls[0]!.supportFixings = {allowScrews: true, holes};
+    scene.placements = [wallPlacement('strict-volume', model.id)];
+    const prepared = await save(scene);
+    const unaligned = structuredClone(scene); unaligned.placements[0]!.position[0] += .02;
+    await expect(save(unaligned)).rejects.toMatchObject({status: 400});
+    const partial = structuredClone(scene); partial.walls[0]!.supportFixings!.holes = [holes[0]!, holes[2]!];
+    await expect(save(partial)).rejects.toMatchObject({status: 400});
+    const after = await repository.room(alice, fixtures.roomA);
+    expect(after.scene).toEqual(prepared.scene); expect(after.revision).toBe(prepared.revision);
+    expect(after.inventory).toEqual(prepared.inventory); expect(after.audit).toEqual(prepared.audit);
+  });
+
 });

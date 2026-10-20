@@ -3,10 +3,11 @@ import { Pool } from 'pg';
 import type { SceneDocument } from '@climbed/contracts';
 import { databaseUrl } from '../src/config.ts';
 import { migrate } from '../src/migrate.ts';
-import { seed, fixtures } from '../src/seed.ts';
+import { fixtures } from '../src/seed.ts';
 import { PostgresRepository, type AuthSession } from '../src/repository.ts';
 import { randomUUID } from 'node:crypto';
 import { boxScene, testScene, wallPlacement } from './fixtures.ts';
+import { seedTestFixtures } from './fixtures.ts';
 import { validateScene } from '@climbed/geometry';
 
 const testUrl = process.env.TEST_DATABASE_URL;
@@ -49,7 +50,7 @@ suite('PostgreSQL réel : isolation, stock atomique et états physiques', () => 
   beforeEach(async () => {
     // Only the explicitly guarded, dedicated test database is reset.
     await pool.query('TRUNCATE organizations,app_users,rooms,room_access,sessions,scene_versions,stock_items,reservations,occupations,idempotency,audit_events CASCADE');
-    await seed(pool);
+    await seedTestFixtures(pool);
     alice = await repository.session((await repository.login('alice@climbed.local', 'climbed-local-demo')).token);
     bob = await repository.session((await repository.login('bob@climbed.local', 'climbed-local-demo')).token);
     clara = await repository.session((await repository.login('clara@climbed.local', 'climbed-local-demo')).token);

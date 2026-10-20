@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createDemoScene, demoModels, sceneSchema, type ModelDefinition, type Placement, type SceneDocument, type Vec3 } from '@climbed/contracts';
-import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
+import { createDemoScene, createMountingExample, demoModels, sceneSchema, type ModelDefinition, type Placement, type SceneDocument, type Vec3 } from '@climbed/contracts';
+import { DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3, Quaternion } from 'three';
 import { createModelGeometry, getMountingHoles, getSupportFixings, snapPlacementToFixing, validatePlacementMounting, validateSceneChange } from '../src/index';
 
 function scene(): SceneDocument {
@@ -100,6 +100,8 @@ describe('authoritative mounting rules and migration', () => {
   });
   it('allows screw volumes only on permitted surface, with every own screw supported', () => {
     const s = scene(), p = { ...hold(s), modelId: 'volume-pyramid', position: [.03, 1.02, 0] as Vec3 };
+    const model = s.models.find(m => m.id === p.modelId)!;
+    model.mounting = { method: 'screw', screwPlacement: 'direct', holes: getMountingHoles(model) };
     expect(validatePlacementMounting(s, p)).toEqual([]);
     s.walls[0]!.supportFixings = { allowScrews: false, holes: [] };
     expect(validatePlacementMounting(s, p).join(' ')).toContain('n’autorise pas');
@@ -143,4 +145,86 @@ describe('authoritative mounting rules and migration', () => {
     const added = scene(); added.placements.push(hold(added, [.03, 1, 0]));
     expect(validateSceneChange(scene(), added).join(' ')).toContain('non aligné');
   });
+});
+
+
+describe('mandatory volume fixings on predrilled supports', () => {
+  function predrilled() {
+    const s = scene(), model = s.models.find(m => m.id === 'volume-dome')!;
+    const holes = getMountingHoles(model);
+    s.walls[0]!.supportFixings = { allowScrews: true, holes: holes.map(h => ({
+      id: h.id, kind: 'pilot', position: [h.position[0], h.position[1] + 1, 0], normal: [0, 0, 1],
+    })) };
+    return { s, p: { ...hold(s), modelId: model.id }, model };
+  }
+  it('rejects a dome off its pilot holes and snaps all four holes together', () => {
+    const {s, p} = predrilled();
+    expect(validatePlacementMounting(s, p)).toEqual([]);
+    p.position[0] = .02;
+    expect(validatePlacementMounting(s, p)).toHaveLength(4);
+    expect(snapPlacementToFixing(s, p)!.position[0]).toBeCloseTo(0, 10);
+    expect(validatePlacementMounting(s, snapPlacementToFixing(s, p)!)).toEqual([]);
+  });
+  it('refuses just two diagonal pilots, one pilot, and four threaded inserts instead of pilots', () => {
+    const {s, p} = predrilled(), holes = structuredClone(s.walls[0]!.supportFixings!.holes);
+    s.walls[0]!.supportFixings!.holes = [holes[0]!, holes[2]!];
+    expect(validatePlacementMounting(s, p)).toHaveLength(2);
+    expect(snapPlacementToFixing(s, p)).toBeUndefined();
+    s.walls[0]!.supportFixings!.holes = [holes[0]!];
+    expect(validatePlacementMounting(s, p)).toHaveLength(3);
+    s.walls[0]!.supportFixings!.holes = holes.map(h => ({...h, kind: 'insert'}));
+    expect(validatePlacementMounting(s, p)).toHaveLength(4);
+  });
+  it('allows direct screwing only when the model explicitly requests it and the support permits it', () => {
+    const {s, p, model} = predrilled(); p.position[0] = .03;
+    expect(validatePlacementMounting(s, p)).toHaveLength(4);
+    model.mounting = {method: 'screw', screwPlacement: 'direct', holes: getMountingHoles(model)};
+    expect(validatePlacementMounting(s, p)).toEqual([]);
+    s.walls[0]!.supportFixings!.allowScrews = false;
+    expect(validatePlacementMounting(s, p).join(' ')).toContain('n’autorise pas');
+  });
+  it('generates distinct pilot and insert grids without changing the legacy wall JSON', () => {
+    const s = scene(), wall = s.walls[0]!, before = JSON.stringify(wall);
+    getSupportFixings(wall); expect(JSON.stringify(wall)).toBe(before);
+    wall.pilotGrid = {pitchX: .25, pitchY: .25, offsetX: .125, offsetY: .125};
+    const holes = getSupportFixings(wall).holes;
+    expect(holes.some(h => h.kind === 'pilot' && h.position[0] === .125 && h.position[1] === 1.125)).toBe(true);
+    expect(holes.some(h => h.kind === 'insert' && h.position[0] === 0 && h.position[1] === 1)).toBe(true);
+  });
+  it.each(['pyramid', 'dome'] as const)('validates all four bolts of the %s example and rejects a missing insert', shape => {
+    const s = scene(), model = createMountingExample(shape, 'example'); s.models.push(model);
+    const p = {...hold(s), modelId: model.id};
+    expect(validateSceneChange(scene(), {...s, placements: [p]})).toEqual([]);
+    s.walls[0]!.supportFixings = {allowScrews: false, holes: getSupportFixings(s.walls[0]!).holes.filter(h => !(h.position[0] === .25 && h.position[1] === 1.25))};
+    expect(validatePlacementMounting(s, p)).toHaveLength(1);
+  });
+  it('mounts a hold on a real sloped receiving hole of the pyramid example', () => {
+    const s = scene(), model = createMountingExample('pyramid', 'example'); s.models.push(model);
+    const volume = {...hold(s), id: 'parent', modelId: model.id}; s.placements = [volume];
+    const insert = model.supportFixings!.holes[0]!;
+    const rotation = new Quaternion().setFromUnitVectors(new Vector3(0,0,1), new Vector3(...insert.normal)).toArray() as [number,number,number,number];
+    const p = {...hold(s), parentType: 'volume' as const, parentId: volume.id, position: insert.position, rotation};
+    expect(validateSceneChange({...s, placements: []}, {...s, placements: [volume, p]})).toEqual([]);
+    expect(ray(model, [.3 + insert.normal[0], 0, .25 + insert.normal[2]], insert.normal.map(n => -n) as Vec3)).toHaveLength(0);
+  });
+});
+
+
+it('allows adding pilot holes while preserving an unchanged inherited anchor, but not invalidating a valid one', () => {
+  const old = scene(); old.placements = [hold(old, [.03, 1, 0])];
+  const next = structuredClone(old); next.walls[0]!.pilotGrid = {pitchX: .25, pitchY: .25};
+  expect(validateSceneChange(old, next)).toEqual([]);
+  const valid = scene(); valid.placements = [hold(valid)];
+  const broken = structuredClone(valid); broken.walls[0]!.supportFixings = {allowScrews: true, holes: []};
+  expect(validateSceneChange(valid, broken).join(' ')).toContain('non aligné');
+});
+
+it('requires the auxiliary antirotation screw to align with its own pilot even on a bolted hold', () => {
+  const s = scene(), model=s.models.find(m=>m.id==='hold-crimp')!;
+  model.mounting={method:'bolt',holes:[...getMountingHoles(model),{id:'antirotation',role:'auxiliary',position:[.04,0,0],diameter:.003}]};
+  const p=hold(s);
+  expect(validatePlacementMounting(s,p).join(' ')).toContain('antirotation');
+  const holes=getSupportFixings(s.walls[0]!).holes;
+  s.walls[0]!.supportFixings={allowScrews:true,holes:[...holes,{id:'pilot-anti',kind:'pilot',position:[.04,1,0],normal:[0,0,1]}]};
+  expect(validatePlacementMounting(s,p)).toEqual([]);
 });

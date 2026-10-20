@@ -50,12 +50,14 @@ export const mountingHoleSchema = z.object({
 export type MountingHole = z.infer<typeof mountingHoleSchema>;
 export const mountingSchema = z.object({
   method: z.enum(['bolt', 'screw']),
+  screwPlacement: z.enum(['pre_drilled', 'direct']).optional(),
   holes: z.array(mountingHoleSchema).min(1).max(30),
   threadDesignation: z.string().min(1).max(80).optional(),
 }).strict();
 export type ModelMounting = z.infer<typeof mountingSchema>;
 export const supportFixingHoleSchema = z.object({
   id,
+  kind: z.enum(['insert', 'pilot']).optional(),
   position: vector3Schema,
   normal: vector3Schema.refine(v => Math.abs(Math.hypot(...v) - 1) < 0.001, 'Normale de fixation non normalisée'),
   diameter: z.number().finite().min(0.001).max(0.1).optional(),
@@ -107,6 +109,7 @@ export const wallSchema = z.object({
   fixing: fixingMetadataSchema.optional(),
   fixingGrid: fixingGridSchema.optional(),
   supportFixings: supportFixingsSchema.optional(),
+  pilotGrid: fixingGridSchema.optional(),
   levelId: id.optional(),
 }).strict();
 export type WallDefinition = z.infer<typeof wallSchema>;
@@ -238,6 +241,26 @@ export const demoModels: ModelDefinition[] = [
   { id: 'volume-dome', version: 1, name: 'Dôme', kind: 'volume', shape: 'dome', dimensions: [0.85, 0.85, 0.38], color: '#bdced1', source: { type: 'parametric', generatorVersion: 1 } },
   { id: 'volume-scoop', version: 1, name: 'Coupelle creuse', kind: 'volume', shape: 'scoop', dimensions: [0.85, 0.85, 0.30], color: '#d27660', source: { type: 'parametric', generatorVersion: 1 } },
 ];
+
+/** Synthetic profiles with explicit fixings, independent of immutable legacy stock models. */
+export function createMountingExample(shape: 'pyramid' | 'dome', modelId: string): ModelDefinition {
+  const pyramid = shape === 'pyramid', normalLength = Math.hypot(5 / 6, 1);
+  return {
+    id: modelId, version: 1, name: pyramid ? 'Pyramide à inserts — démo' : 'Dôme à 4 boulons — démo',
+    kind: 'volume', shape, dimensions: pyramid ? [1.2, 1.2, .5] : [1, 1, .38], color: pyramid ? '#527f99' : '#bdced1',
+    source: { type: 'parametric', generatorVersion: 1 },
+    fixing: { method: 'bolt', provenance: { status: 'unknown', reference: 'Exemple synthétique ; aucune référence fabricant' } },
+    mounting: { method: 'bolt', holes: [[-.25, -.25], [.25, -.25], [.25, .25], [-.25, .25]].map(([x, y], i) => ({
+      id: `bolt-${i + 1}`, position: [x!, y!, 0], diameter: .012, role: 'primary',
+    })) },
+    supportFixings: { allowScrews: false, holes: pyramid ? [
+      { id: 'right', kind: 'insert', position: [.3, 0, .25], normal: [(5 / 6) / normalLength, 0, 1 / normalLength], diameter: .012 },
+      { id: 'left', kind: 'insert', position: [-.3, 0, .25], normal: [-(5 / 6) / normalLength, 0, 1 / normalLength], diameter: .012 },
+      { id: 'top', kind: 'insert', position: [0, .3, .25], normal: [0, (5 / 6) / normalLength, 1 / normalLength], diameter: .012 },
+      { id: 'bottom', kind: 'insert', position: [0, -.3, .25], normal: [0, -(5 / 6) / normalLength, 1 / normalLength], diameter: .012 },
+    ] : [] },
+  };
+}
 
 export function createDemoScene(): SceneDocument {
   // A wall lies in local XY, faces +Z, and starts at y=0. Tilt around X creates an overhang.

@@ -26,24 +26,26 @@ export function getMountingMethod(model: ModelDefinition): 'bolt' | 'screw' {
 export function getSupportFixings(support: WallDefinition | ModelDefinition): SupportFixings {
   if (support.supportFixings) return structuredClone(support.supportFixings);
   if ('width' in support) {
-    const grid = support.fixingGrid;
-    const pitchX = grid?.pitchX ?? support.fixingSpacing, pitchY = grid?.pitchY ?? support.fixingSpacing;
-    const originX = grid?.offsetX ?? 0, originY = grid?.offsetY ?? 0;
-    const angle = (grid?.rotationDegrees ?? 0) * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle);
-    // Scan in grid coordinates, including negative indices when an origin was explicitly provided.
-    const radius = Math.hypot(support.width, support.height) + Math.hypot(originX, originY);
-    const nx = Math.min(200, Math.ceil(radius / pitchX)), ny = Math.min(200, Math.ceil(radius / pitchY));
     const holes: SupportFixingHole[] = [];
-    for (let ix = -nx; ix <= nx; ix++) for (let iy = -ny; iy <= ny; iy++) {
-      const gx = ix * pitchX, gy = iy * pitchY;
-      const position: Vec3 = [originX + gx * cos - gy * sin, originY + gx * sin + gy * cos, 0];
-      if (!isPointOnWall(support, position)) continue;
-      holes.push({ id: `insert-${ix}-${iy}`, position, normal: [0, 0, 1],
-        ...(support.fixing?.holeDiameterMm ? { diameter: support.fixing.holeDiameterMm / 1000 } : {}),
-        ...(support.fixing?.threadDesignation ? { threadDesignation: support.fixing.threadDesignation } : {}),
-      });
-      if (holes.length >= 4000) return { allowScrews: true, holes };
-    }
+    const appendGrid = (grid: WallDefinition['fixingGrid'], kind: 'insert' | 'pilot') => {
+      const pitchX = grid?.pitchX ?? support.fixingSpacing, pitchY = grid?.pitchY ?? support.fixingSpacing;
+      const originX = grid?.offsetX ?? 0, originY = grid?.offsetY ?? 0;
+      const angle = (grid?.rotationDegrees ?? 0) * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle);
+      const radius = Math.hypot(support.width, support.height) + Math.hypot(originX, originY);
+      const nx = Math.min(200, Math.ceil(radius / pitchX)), ny = Math.min(200, Math.ceil(radius / pitchY));
+      for (let ix = -nx; ix <= nx; ix++) for (let iy = -ny; iy <= ny; iy++) {
+        if (holes.length >= 4000) return;
+        const gx = ix * pitchX, gy = iy * pitchY;
+        const position: Vec3 = [originX + gx * cos - gy * sin, originY + gx * sin + gy * cos, 0];
+        if (!isPointOnWall(support, position)) continue;
+        holes.push({ id: `${kind}-${ix}-${iy}`, kind, position, normal: [0, 0, 1],
+          ...(kind === 'insert' && support.fixing?.holeDiameterMm ? { diameter: support.fixing.holeDiameterMm / 1000 } : {}),
+          ...(kind === 'insert' && support.fixing?.threadDesignation ? { threadDesignation: support.fixing.threadDesignation } : {}),
+        });
+      }
+    };
+    appendGrid(support.fixingGrid, 'insert');
+    if (support.pilotGrid) appendGrid(support.pilotGrid, 'pilot');
     return { allowScrews: true, holes };
   }
   // A single explicitly synthetic front insert on the demonstration box; other volume
@@ -60,10 +62,11 @@ function supportFor(scene: SceneDocument, placement: Placement): WallDefinition 
 function mountedPoint(placement: Placement, hole: MountingHole): Vector3 {
   return new Vector3(...hole.position).applyQuaternion(new Quaternion(...placement.rotation)).add(new Vector3(...placement.position));
 }
-function compatible(model: ModelDefinition, normal: Vector3, hole: SupportFixingHole): boolean {
+function compatible(model: ModelDefinition, normal: Vector3, hole: SupportFixingHole, method = getMountingMethod(model)): boolean {
+  if (method === 'screw' ? hole.kind !== 'pilot' : hole.kind === 'pilot') return false;
   const requiredThread = model.mounting?.threadDesignation ?? model.fixing?.threadDesignation;
   return normal.dot(new Vector3(...hole.normal)) >= .999 &&
-    !(requiredThread && hole.threadDesignation && requiredThread !== hole.threadDesignation);
+    !(method === 'bolt' && requiredThread && hole.threadDesignation && requiredThread !== hole.threadDesignation);
 }
 export function nearestCompatibleHole(scene: SceneDocument, placement: Placement): SupportFixingHole | undefined {
   const model = scene.models.find(m => m.id === placement.modelId), support = supportFor(scene, placement);
@@ -92,10 +95,12 @@ export function validatePlacementMounting(scene: SceneDocument, placement: Place
   const occupied = new Set<string>();
   for (const hole of holes) {
     const point = mountedPoint(placement, hole), position = point.toArray() as Vec3;
-    if (method === 'bolt' && hole.role === 'primary') {
-      const insert = fixings.holes.find(candidate => !occupied.has(candidate.id) && compatible(model, normal, candidate) &&
+    const holeMethod = method === 'bolt' && hole.role === 'primary' ? 'bolt' : 'screw';
+    if (holeMethod === 'bolt' || model.mounting?.screwPlacement !== 'direct') {
+      if (holeMethod === 'screw' && !fixings.allowScrews) { errors.push(`La fixation complémentaire ${hole.id} nécessite une zone de vissage autorisée : ${placement.id}`); continue; }
+      const insert = fixings.holes.find(candidate => !occupied.has(candidate.id) && compatible(model, normal, candidate, holeMethod) &&
         point.distanceTo(new Vector3(...candidate.position)) <= MOUNTING_ALIGNMENT_EPSILON);
-      if (!insert) errors.push(`Trou ${hole.id} non aligné avec un insert compatible du support : ${placement.id}`);
+      if (!insert) errors.push(`Trou ${hole.id} non aligné avec un ${holeMethod === 'screw' ? 'trou pilote' : 'insert'} compatible du support : ${placement.id}`);
       else occupied.add(insert.id);
     } else {
       if (!fixings.allowScrews) { errors.push(`La fixation complémentaire ${hole.id} nécessite une zone de vissage autorisée : ${placement.id}`); continue; }
@@ -109,7 +114,7 @@ export function validatePlacementMounting(scene: SceneDocument, placement: Place
 export function snapPlacementToFixing(scene: SceneDocument, placement: Placement, maxDistance = .06): Placement | undefined {
   const model = scene.models.find(m => m.id === placement.modelId);
   if (!model) return undefined;
-  if (getMountingMethod(model) === 'screw') return validatePlacementMounting(scene, placement).length ? undefined : structuredClone(placement);
+  if (getMountingMethod(model) === 'screw' && model.mounting?.screwPlacement === 'direct') return validatePlacementMounting(scene, placement).length ? undefined : structuredClone(placement);
   const own = getMountingHoles(model).find(hole => hole.role === 'primary'), nearest = nearestCompatibleHole(scene, placement);
   if (!own || !nearest) return undefined;
   const point = mountedPoint(placement, own), delta = new Vector3(...nearest.position).sub(point);
@@ -124,13 +129,16 @@ function canonical(value: unknown): unknown {
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)]));
   return value;
 }
+export function mountingObjectFingerprint(scene: SceneDocument, placement: Placement): string {
+  const model = scene.models.find(m => m.id === placement.modelId);
+  return JSON.stringify(canonical([placement, model && [model.kind, model.shape, model.dimensions, model.mounting, model.fixing]]));
+}
 export function mountingFingerprint(scene: SceneDocument, placement: Placement): string {
-  const model = scene.models.find(m => m.id === placement.modelId), support = supportFor(scene, placement);
+  const support = supportFor(scene, placement);
   // Compare the immutable source parameters, rather than materialising hundreds of
   // insert points for every unchanged piece on each pointer move or save.
-  const modelKey = model && [model.kind, model.shape, model.dimensions, model.mounting, model.fixing];
   const supportKey = support && ('width' in support
-    ? [support.fixingSpacing, support.fixingGrid, support.fixing, support.supportFixings]
+    ? [support.fixingSpacing, support.fixingGrid, support.pilotGrid, support.fixing, support.supportFixings]
     : [support.kind, support.shape, support.dimensions, support.fixingGrid, support.fixing, support.supportFixings]);
-  return JSON.stringify(canonical([placement, modelKey, supportKey]));
+  return JSON.stringify(canonical([mountingObjectFingerprint(scene, placement), supportKey]));
 }

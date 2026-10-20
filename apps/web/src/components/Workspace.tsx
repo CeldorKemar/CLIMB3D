@@ -24,10 +24,13 @@ import type {
   ReservationAction,
   RoomState,
   WallDefinition,
+  Vec3,
 } from "@climbed/contracts";
 import {
   findSceneCollisions,
   quaternionFromWallAngles,
+  getRoomLevels,
+  translateStructure,
 } from "@climbed/geometry";
 import { api } from "../api/client";
 import { useEditor } from "../hooks/useEditor";
@@ -54,6 +57,7 @@ import { MultiWallBuilder } from "./MultiWallBuilder";
 import { HistoryPanel } from "./HistoryPanel";
 import { RoomMap } from "./RoomMap";
 import { LevelsPanel } from "./LevelsPanel";
+import { MoveControls } from "./MoveControls";
 interface Props {
   session: BootstrapResponse;
   roomId: string;
@@ -77,6 +81,8 @@ export function Workspace({
   });
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
+  const [moveStep, setMoveStep] = useState(.1);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
   const [editorView, setEditorView] = useState<"room" | "catalog">("room");
   const [rightTab, setRightTab] = useState<
@@ -119,6 +125,7 @@ export function Workspace({
     setSelected(ids.at(-1) ?? null);
   }
   function select(id: string | null, additive = false) {
+    setSelectedLevelId(null);
     setActiveModelId(null);
     if (additive && id && scene.placements.some((p) => p.id === id)) {
       const existing = selectedIds.filter((key) =>
@@ -130,6 +137,22 @@ export function Workspace({
           : [...existing, id],
       );
     } else setSelection(id ? [id] : []);
+  }
+  function selectLevel(id: string) {
+    setSelection([]);
+    setSelectedLevelId(id);
+    setActiveModelId(null);
+    navigate("levels");
+  }
+  const moveTarget = selectedIds.length <= 1 && scene.walls.some(w => w.id === selected)
+    ? { kind: "wall" as const, id: selected! }
+    : selectedLevelId && getRoomLevels(scene).some(l => l.id === selectedLevelId)
+      ? { kind: "level" as const, id: selectedLevelId } : null;
+  const moveName = moveTarget?.kind === "wall" ? scene.walls.find(w => w.id === moveTarget.id)?.name
+    : getRoomLevels(scene).find(l => l.id === moveTarget?.id)?.name;
+  function moveStructure(delta: Vec3) {
+    if (!moveTarget || busy) return;
+    edit(d => Object.assign(d, translateStructure(d, moveTarget, delta)));
   }
   function openCatalog() {
     setActiveModelId(null);
@@ -180,6 +203,16 @@ export function Workspace({
         return;
       }
       if (editorView !== "room") return;
+      if (moveTarget && !activeModel && !e.ctrlKey && !e.metaKey && !target.closest('.room-map') && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+        if (e.altKey && !["ArrowUp", "ArrowDown"].includes(e.key)) return;
+        e.preventDefault();
+        const step = moveStep * (e.shiftKey ? 10 : 1);
+        const delta: Vec3 = [0, 0, 0];
+        const axis = e.key === "ArrowLeft" || e.key === "ArrowRight" ? 0 : e.altKey ? 2 : 1;
+        delta[axis] = (e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : 1) * step;
+        moveStructure(delta);
+        return;
+      }
       if (
         modifier &&
         !e.shiftKey &&
@@ -230,6 +263,9 @@ export function Workspace({
     pendingRoom,
     chainOpen,
     busy,
+    moveStep,
+    selectedLevelId,
+    activeModelId,
   ]);
   useEffect(() => {
     if (!dirty) return;
@@ -633,6 +669,7 @@ export function Workspace({
                 setRightTab("design");
               }}
               onModel={(m) => {
+                setSelectedLevelId(null);
                 setActiveModelId(m?.id ?? null);
                 setSelection([]);
               }}
@@ -678,6 +715,8 @@ export function Workspace({
                   scene={scene}
                   selected={selected}
                   selectedIds={selectedIds}
+                  selectedLevelId={selectedLevelId}
+                  onSelectLevel={selectLevel}
                   activeModel={activeModel}
                   grid={grid}
                   view={view}
@@ -686,6 +725,7 @@ export function Workspace({
                   hiddenRouteIds={hiddenRouteIds}
                   remainingStock={remaining}
                 />
+                {moveTarget && moveName && !activeModel && <MoveControls name={moveName} step={moveStep} onStep={setMoveStep} onMove={moveStructure} />}
                 <RoomMap
                   scene={scene}
                   selectedWallId={
@@ -845,6 +885,8 @@ export function Workspace({
               ) : rightTab === "levels" ? (
                 <LevelsPanel
                   scene={scene}
+                  selectedLevelId={selectedLevelId}
+                  onSelectLevel={selectLevel}
                   selectedWallId={
                     scene.walls.some((w) => w.id === selected)
                       ? (selected ?? undefined)

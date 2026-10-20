@@ -163,3 +163,19 @@ Un objet boulonné doit aligner tous ses trous principaux avec des inserts disti
 Le survol présente le même candidat que le clic et la validation serveur : vert si accepté, rouge avec les motifs en cas de défaut de fixation, collision ou manque de stock dans l’éditeur. Les anciennes ancres restent consultables et sauvegardables si inchangées ; une ancre nouvelle, déplacée ou réintroduite par restauration respecte ces règles. Aucun perçage nouveau n’est inventé pendant le placement.
 
 Les coques creuses constructeur, les longueurs de vis, la résistance des supports et une certification mécanique ne sont pas modélisées. Le profil synthétique de pyramide conserve la forme paramétrique du POC ; il ne reproduit pas le dos d’un produit commercial.
+
+## Dernier retour : nombre de vis et supports prépercés
+
+Les huit nouvelles tentatives (Metolius, Cheeta, Bluepill, Atomik, Escape, EP, recherche Google et URL candidate Mountain Project) ont toutes échoué au tunnel HTTPS avec `403 Forbidden`. Les réponses techniques sont conservées localement dans `.data/research/fixations-followup/responses.json`. Aucun document ni image de fournisseur n’a été reçu ; l’existence du chemin de forum candidat n’est pas vérifiée. Ce lot ne fournit donc aucune preuve constructeur autorisant deux vis en diagonale ou une vis unique.
+
+Le comportement retenu est conservateur : **toutes les fixations déclarées par le modèle sont obligatoires**. Aucun choix de vis actives ni verdict de stabilité par moteur physique n’est proposé. Calculer une résistance réelle demanderait au minimum le matériau et l’épaisseur du support, l’ancrage, les caractéristiques des vis, les efforts et les consignes du produit ; le seul maillage ne fournit pas ces données.
+
+Le mode prépercé est désormais le défaut des objets vissés. Chaque trou propre doit coïncider avec un **trou pilote** distinct et correctement orienté. Un insert fileté ne compte pas comme trou pilote. Le catalogue permet de créer une variante dont le profil autorise explicitement le vissage direct ; celui-ci contrôle toujours tous les points de vis et l’autorisation du support. Les modèles déjà inventoriés restent immuables.
+
+Les pans acceptent une trame pilote facultative, distincte de leur trame d’inserts. Le panneau des propriétés permet d’en déclarer le pas et le décalage ; les marqueurs pilotes sont orange. Les valeurs proposées lors de l’activation sont des données de démonstration à remplacer par celles du support réel. Le placement ne perce rien automatiquement. Un volume dont les entraxes ne correspondent pas au support est refusé, même si son centre est proche d’un trou.
+
+Deux nouveaux exemples du catalogue ont une identité propre : une pyramide à quatre boulons et quatre inserts sur ses faces inclinées, et un dôme à quatre boulons. Leur géométrie et leurs trous sont explicites et testés. Ils ne reproduisent aucun produit commercial ni aucune image consultée. Ils démarrent sans stock ; l’utilisateur déclare ses exemplaires pour les essayer. Les modèles et exemplaires existants ne sont pas remplacés.
+
+Les placements hérités inchangés restent conservés, avec avertissement dans leurs propriétés s’ils ne respectent pas les règles courantes. Une modification du support peut réparer des défauts hérités sans imposer de déplacer les autres pièces, mais ne peut pas invalider une fixation auparavant valide. Une nouvelle pièce ou une pièce déplacée doit satisfaire toutes ses fixations.
+
+La photo de salle fournie par le porteur du projet montre aussi qualitativement le cas de prises posées sur certains volumes noirs. Elle ne permet pas de relever les filetages, les entraxes ni le nombre de fixations au mur et ne sert donc pas de profil constructeur.

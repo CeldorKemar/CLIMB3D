@@ -168,3 +168,36 @@ Sept scénarios Playwright supplémentaires couvrent la sélection Ctrl sur les 
 La campagne utilise une base **jetable dédiée** `climbed_e2e_test`, différente de `climbed_test` et de la base de développement. Pour les nouveaux tests, les fixtures de cette seule base démarrent avec les murs et modèles de démonstration mais sans placements : les anciennes ancres hors trame ne peuvent pas être supprimées puis réintroduites comme des ancres nouvelles. Les routes initiales y conservent leurs attributs mais ont `placementIds: []`, `startIds: []`, `finishId: null`. Cette préparation concerne exclusivement les fixtures de test ; `setup:local` conserve toujours les scènes et placements de développement. Le serveur de cette campagne est compilé, sans watch, avec `API_PORT=3002` et `DATABASE_URL` visant cette base. Ne pas lancer cette campagne sur une salle de travail.
 
 Résultat final de cette campagne : **35/35 réussis en 2,6 min**, dont 12 parcours HTTP et 23 parcours navigateur, aucun skip. Les 28 scénarios antérieurs sont conservés.
+
+## Profils prépercés et déplacements du dernier complément
+
+La suite Vitest courante contient **135 tests** : 66 géométrie/disposition, 27 commandes/historique local, 6 planification et 36 intégrations PostgreSQL. Les cas supplémentaires vérifient le dôme hors alignement, une ou deux vis seulement, la distinction pilote/insert, le vissage direct explicite, la vis antirotation, les quatre boulons des exemples, une prise sur l’insert incliné de la pyramide et les translations des pans et sols. Le refus serveur vérifie l’absence d’écriture partielle.
+
+Les tests antérieurs portant sur stock, collisions et hiérarchie utilisent désormais des profils de vissage direct **explicitement déclarés dans leurs fixtures**. Leur catalogue et leurs exemplaires sont créés ensemble avec les mêmes empreintes, dans la base de test. Les tests du mode prépercé utilisent des profils distincts et ne bénéficient pas de ce mode direct. Le seed ordinaire conserve les modèles historiques sans changement ; les salles de développement ne reçoivent pas ces fixtures.
+
+La préparation reproductible est `npm run test:e2e:prepare`, après la préparation locale et la compilation. Elle crée par défaut `climbed_fixings_e2e_test`, base distincte de développement et de `climbed_test`, avec trois salles de fixtures sans placements initiaux. Une base préexistante avec un catalogue incompatible ou des placements est refusée, sans réinitialisation de ses scènes. Une URL différente peut être fournie via `E2E_DATABASE_URL` ; son nom doit finir par `_e2e_test` et être différent de la base de développement.
+
+Démarrer ensuite le serveur compilé sur 3002 **avec cette URL comme `DATABASE_URL`**. Exemple depuis un terminal Linux à la racine du dépôt, en réutilisant les identifiants locaux sans les afficher :
+
+```sh
+node --env-file=.env --input-type=module - <<'JS'
+import { spawn } from 'node:child_process';
+const url = new URL(process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL);
+if (!process.env.E2E_DATABASE_URL) url.pathname = '/climbed_fixings_e2e_test';
+const server = spawn('npm', ['start'], {
+  stdio: 'inherit',
+  env: { ...process.env, DATABASE_URL: url.toString(), API_PORT: '3002' },
+});
+server.on('exit', code => { process.exitCode = code ?? 1; });
+JS
+```
+
+Dans le second terminal :
+
+```sh
+WEB_BASE_URL=http://127.0.0.1:3002 API_BASE_URL=http://127.0.0.1:3002/api/v1 npm run test:e2e
+```
+
+Trois nouveaux parcours UI complètent les 35 précédents : déplacement global et annulation, protection des champs et minimap sans sol ; dôme à quatre trous pilotes avec aperçu rouge/vert et refus HTTP partiel ; exemple de pyramide créé depuis le catalogue et vraie pose WebGL d’une prise sur un insert incliné. La capture de cette pyramide est une preuve du modèle synthétique, pas une image de produit fabricant.
+
+Campagne finale : **38/38 réussis en 3,0 min**, aucun skip. Le nettoyage n’agit que sur les modèles créés par le scénario ; les stocks historiques de la fixture restent protégés. La préparation contrôle les quantités initiales attendues et l’absence d’occupations actives.

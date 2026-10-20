@@ -14,6 +14,7 @@ import {
   materializeRoomLevels,
   projectWallFootprint,
   validateRoomLayout,
+  translateStructure,
 } from "../src/layout";
 
 function baseScene(): SceneDocument {
@@ -205,5 +206,27 @@ describe("room plan coordinates and level persistence", () => {
     expect(errors.some((e) => e.includes("se croise"))).toBe(true);
     expect(errors.some((e) => e.includes("surface"))).toBe(true);
     expect(errors.some((e) => e.includes("dupliqué"))).toBe(true);
+  });
+});
+
+
+describe('structure translation in global coordinates', () => {
+  it('translates an inclined panel on all global axes without changing its children or rotation', () => {
+    const scene = createDemoScene(), before = structuredClone(scene), wall = scene.walls[0]!;
+    const next = translateStructure(scene, {kind: 'wall', id: wall.id}, [.1, .2, -.3]);
+    expect(next.walls[0]!.position).toEqual([.1, .2, -.3]);
+    expect(next.walls[0]!.rotation).toEqual(wall.rotation);
+    expect(next.placements).toEqual(scene.placements);
+    expect(next.walls.slice(1)).toEqual(scene.walls.slice(1));
+    expect(scene).toEqual(before);
+  });
+  it('moves a floor outline on XZ and carries its panels only by its elevation delta', () => {
+    const scene = materializeRoomLevels(createDemoScene()), level = scene.levels![0]!;
+    const before = structuredClone(scene), next = translateStructure(scene, {kind: 'level', id: level.id}, [1, 2, -3]);
+    expect(next.levels![0]!.outline).toEqual(level.outline.map(([x,z]) => [x+1,z-3]));
+    expect(next.levels![0]!.elevation).toBe(level.elevation+2);
+    expect(next.walls.map(w=>w.position)).toEqual(scene.walls.map(w=>[w.position[0],w.position[1]+2,w.position[2]]));
+    expect(next.placements).toEqual(scene.placements);
+    expect(scene).toEqual(before);
   });
 });

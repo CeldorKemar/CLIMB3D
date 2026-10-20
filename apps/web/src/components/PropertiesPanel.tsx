@@ -5,6 +5,9 @@ import {
   getWallAngles,
   quaternionFromWallAngles,
   wallProjectedDimensions,
+  getMountingHoles,
+  getMountingMethod,
+  validatePlacementMounting,
 } from "@climbed/geometry";
 import type { SceneDocument, Quat, Vec3 } from "@climbed/contracts";
 import type { Edit } from "../domain/editor";
@@ -164,6 +167,18 @@ export function PropertiesPanel({
       )}
       {wall && (
         <>
+          <div className="property-section">
+            <h4>Préperçage pour les vis</h4>
+            <label><input type="checkbox" aria-label="Activer la trame de trous pilotes" checked={!!wall.pilotGrid}
+              onChange={event => changeWall({ pilotGrid: event.target.checked ? { pitchX: .25, pitchY: .25, offsetX: .125, offsetY: .125 } : undefined })} /> Trame de trous pilotes (orange)</label>
+            <p className="small-muted">Distincts des inserts filetés. À renseigner selon le pan réel ; aucun trou n’est créé automatiquement au placement.</p>
+            {wall.pilotGrid && <div className="field-pair">
+              {(['pitchX', 'pitchY', 'offsetX', 'offsetY'] as const).map(key => <NumberField key={key}
+                label={{ pitchX: 'Pas pilote X', pitchY: 'Pas pilote Y', offsetX: 'Décalage pilote X', offsetY: 'Décalage pilote Y' }[key]}
+                value={wall.pilotGrid![key] ?? 0} min={key.startsWith('pitch') ? .01 : undefined} unit="m"
+                onChange={n => changeWall({ pilotGrid: { ...wall.pilotGrid, [key]: n } })} />)}
+            </div>}
+          </div>
           <div className="property-section">
             <h4>Géométrie du pan</h4>
             <label className="text-field">
@@ -358,6 +373,9 @@ export function PropertiesPanel({
           </div>
         </>
       )}
+      {model && <div className="property-section"><p className="small-muted">{getMountingHoles(model).length} fixations requises · {getMountingMethod(model) === 'bolt' ? 'sur inserts compatibles' : model.mounting?.screwPlacement === 'direct' ? 'vissage direct autorisé' : 'sur trous pilotes compatibles'}. Aucun montage partiel n’est accepté.</p>
+        {placement && validatePlacementMounting(scene, placement).length > 0 && <p className="error-banner" role="status">Placement hérité à corriger : {validatePlacementMounting(scene, placement).join(' · ')}</p>}
+      </div>}
       {position && (
         <div className="property-section">
           <h4>Position {placement ? "sur le support" : "dans la scène"}</h4>

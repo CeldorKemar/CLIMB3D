@@ -43,6 +43,8 @@ interface Props {
   scene: SceneDocument;
   selected: string | null;
   selectedIds?: string[];
+  selectedLevelId?: string | null;
+  onSelectLevel?: (id: string) => void;
   activeModel: ModelDefinition | undefined;
   grid: boolean;
   view: { mode: ViewMode; seq: number; wallId?: string };
@@ -54,22 +56,24 @@ interface Props {
 }
 function Fixings({ support }: { support: WallDefinition | ModelDefinition }) {
   const geometry = useMemo(() => {
-    const coords: number[] = [];
+    const coords: number[] = [], colors: number[] = [];
     for (const hole of getSupportFixings(support).holes) {
       const p = new Vector3(...hole.position).addScaledVector(
         new Vector3(...hole.normal),
         0.001,
       );
       coords.push(p.x, p.y, p.z);
+      colors.push(...(hole.kind === 'pilot' ? [.9, .35, .04] : [.22, .2, .16]));
     }
     const g = new BufferGeometry();
     g.setAttribute("position", new Float32BufferAttribute(coords, 3));
+    g.setAttribute("color", new Float32BufferAttribute(colors, 3));
     return g;
   }, [support]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   return (
     <points geometry={geometry} raycast={() => undefined}>
-      <pointsMaterial color="#454238" size={0.014} sizeAttenuation />
+      <pointsMaterial vertexColors size={0.014} sizeAttenuation />
     </points>
   );
 }
@@ -555,7 +559,7 @@ export function SceneCanvas(props: Props) {
             </group>
           ))}
         </group>
-        <RoomFloors scene={scene} />
+        <RoomFloors scene={scene} selectedLevelId={props.selectedLevelId} onSelectLevel={!activeModel ? props.onSelectLevel : undefined} />
         {grid && (
           <gridHelper
             args={[12, 24, "#98a297", "#c0c5bb"]}

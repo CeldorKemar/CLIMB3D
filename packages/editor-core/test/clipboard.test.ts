@@ -1,10 +1,11 @@
+import { directScrewScene } from '../../geometry/tests/fixtures';
 import { describe, expect, it } from 'vitest';
 import { createDemoScene, type SceneDocument } from '@climbed/contracts';
 import { getWorldPose, quaternionFromWallAngles } from '@climbed/geometry';
 import { copySelection, createSelectionCopy, InvalidSceneError } from '../src/index';
 
 function fixture(): SceneDocument {
-  const scene = createDemoScene();
+  const scene = directScrewScene(createDemoScene());
   scene.walls = [{ ...scene.walls[0]!, width: 8, height: 4, position: [1, 0, -2], rotation: [0, 0, 0, 1],
     openings: [{ id: 'opening', x: 2, y: 2, width: .4, height: .4 }] }];
   scene.placements = [

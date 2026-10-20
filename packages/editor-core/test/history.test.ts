@@ -1,10 +1,11 @@
+import { directScrewScene } from '../../geometry/tests/fixtures';
 import { describe, expect, it } from 'vitest';
 import { createDemoScene } from '@climbed/contracts';
 import { applyCommand, commitScene, createHistory, undoHistory, redoHistory } from '../src/index';
 
 describe('commandes de conception réversibles', () => {
   it('retrouve les versions complètes et invalide la branche redo après une nouvelle édition', () => {
-    const initial = createDemoScene();
+    const initial = directScrewScene(createDemoScene());
     const first = applyCommand(initial, { type: 'patch-wall', id: 'wall-main', patch: { width: 4.9 } });
     const history = commitScene(createHistory(initial), first);
     const back = undoHistory(history);
@@ -16,7 +17,7 @@ describe('commandes de conception réversibles', () => {
   });
 
   it('supprime les enfants et associations de parcours sans toucher la scène source', () => {
-    const scene = createDemoScene();
+    const scene = directScrewScene(createDemoScene());
     const next = applyCommand(scene, { type: 'remove-wall', id: 'wall-main' });
     expect(next.walls).toHaveLength(scene.walls.length - 1);
     expect(next.placements.some(p => p.parentId === 'wall-main' || p.parentId === 'placement-volume')).toBe(false);
@@ -26,7 +27,7 @@ describe('commandes de conception réversibles', () => {
   });
 
   it('rejette une modification invalide sans perdre le dernier état', () => {
-    const scene = createDemoScene();
+    const scene = directScrewScene(createDemoScene());
     expect(() => applyCommand(scene, { type: 'patch-wall', id: 'wall-main', patch: { width: 0 } })).toThrow();
     expect(scene.walls[0]?.width).toBe(5);
     let singleWall = scene;
@@ -35,7 +36,7 @@ describe('commandes de conception réversibles', () => {
   });
 
   it('une entrée d’historique conserve les définitions et n’exécute aucun stock', () => {
-    const scene = createDemoScene();
+    const scene = directScrewScene(createDemoScene());
     const state = createHistory(scene);
     scene.name = 'Mutation extérieure';
     expect(state.present.name).toBe('Atelier de bloc');
@@ -43,7 +44,7 @@ describe('commandes de conception réversibles', () => {
   });
 
   it('ouvre un ancien contact sans le réécrire et autorise sa correction sans accepter de nouvelle collision', () => {
-    const scene = createDemoScene();
+    const scene = directScrewScene(createDemoScene());
     scene.placements = [
       { id: 'old-a', modelId: 'volume-box', modelVersion: 1, parentType: 'wall', parentId: 'wall-main', position: [-1, 1, 0], rotation: [0, 0, 0, 1] },
       { id: 'old-b', modelId: 'volume-box', modelVersion: 1, parentType: 'wall', parentId: 'wall-main', position: [-1, 1, 0], rotation: [0, 0, 0, 1] },

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
-import { createDemoScene, demoModels } from '@climbed/contracts';
+import { createDemoScene, demoModels, type ModelDefinition } from '@climbed/contracts';
 import { databaseUrl, production } from './config.ts';
 import { fingerprint, hashPassword } from './security.ts';
 
@@ -9,7 +9,7 @@ export const fixtures = {
   alpine: '11111111-1111-4111-8111-111111111111', other: '22222222-2222-4222-8222-222222222222',
   roomA: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', roomB: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', roomC: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
 };
-export async function seed(pool: Pool) {
+export async function seed(pool: Pool, models: ModelDefinition[] = demoModels) {
   if (production()) throw new Error('Les comptes de démonstration sont interdits en production.');
   const passwordHash = await hashPassword('climbed-local-demo');
   const db = await pool.connect();
@@ -27,11 +27,12 @@ export async function seed(pool: Pool) {
     for (const [id, org, email, name, role] of accounts)
       await db.query('INSERT INTO app_users(id,org_id,email,name,role,password_hash) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING', [id, org, email, name, role, passwordHash]);
     for (const [room, org, name] of [[fixtures.roomA, fixtures.alpine, 'Alpine — Atelier'], [fixtures.roomB, fixtures.alpine, 'Alpine — Annexe'], [fixtures.roomC, fixtures.other, 'Autre client — Bloc']]) {
-      const inserted = await db.query('INSERT INTO rooms(id,org_id,name,scene) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id', [room, org, name, createDemoScene()]);
+      const scene = { ...createDemoScene(), models: structuredClone(models) };
+      const inserted = await db.query('INSERT INTO rooms(id,org_id,name,scene) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id', [room, org, name, scene]);
       if (inserted.rowCount) {
         const actor = org === fixtures.alpine ? accounts[0][0] : accounts[2][0];
-        await db.query('INSERT INTO scene_versions(id,org_id,room_id,revision,scene,actor_id) VALUES($1,$2,$3,1,$4,$5)', [randomUUID(), org, room, createDemoScene(), actor]);
-        for (const model of demoModels) {
+        await db.query('INSERT INTO scene_versions(id,org_id,room_id,revision,scene,actor_id) VALUES($1,$2,$3,1,$4,$5)', [randomUUID(), org, room, scene, actor]);
+        for (const model of models) {
           const quantity = model.kind === 'volume' ? 1 : 12;
           for (let i = 0; i < quantity; i++)
             await db.query('INSERT INTO stock_items(id,org_id,room_id,model_id,model_fingerprint) VALUES($1,$2,$3,$4,$5)', [randomUUID(), org, room, model.id, fingerprint(model)]);

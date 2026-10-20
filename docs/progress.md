@@ -188,3 +188,28 @@ Les profils de fixation sont des exemples synthétiques. Les notices fournisseur
 L’interface de sol édite des rectangles et les escaliers sont droits ; aucune trémie automatique, raccord architectural ou vérification réglementaire n’est fournie. Les collisions entre pièces et pans restent contrôlées ; les sols et escaliers sont des éléments de disposition, sans solveur de collision architectural. Les essais Chromium à rendu logiciel ne valident pas la fluidité sur un laptop Windows réel.
 
 Le point de retour avant ce lot est `50086c4`. La livraison reste sur `poc/climbed-3d`, sans déploiement externe. Les sections précédentes conservent les résultats historiques de chaque lot ; elles ne décrivent pas toutes les fonctions de cette révision.
+
+## Complément — fixations des volumes et déplacements
+
+### Réalisation
+
+- Le mode prépercé est le défaut des modèles vissés : chaque fixation exige un trou pilote distinct et orienté correctement. Les inserts filetés sont distingués des pilotes et ne peuvent pas les remplacer. Le vissage direct reste possible uniquement s’il est explicitement choisi dans le profil du modèle et autorisé par le support.
+- Tous les points déclarés sont obligatoires, y compris une vis antirotation. Aucun montage à une ou deux vis seulement n’est validé lorsque le profil en exige quatre. Pas de simulation prétendant déterminer la résistance à partir du seul maillage.
+- Trame pilote facultative dans les propriétés des pans, avec pas et décalages ; marqueurs orange. Aucun trou n’est ajouté automatiquement pendant le placement. Les nouveaux modèles restent soumis aux règles d’inventaire immuable.
+- Deux exemples distincts dans le catalogue : pyramide à quatre boulons avec quatre inserts inclinés recevant des prises et dôme à quatre boulons. Profils synthétiques, sans modification des références ou stocks existants. Déclaration de stock nécessaire pour les essayer.
+- Déplacement global des pans et sols par flèches ou six boutons X/Y/Z. Pas réglable ; Alt + haut/bas pour Z, Maj pour multiplier le pas par dix. Champs de saisie et dialogues protégés. Les sols se sélectionnent dans la scène ou dans le panneau des niveaux ; leur déplacement vertical transporte les pans associés, leur déplacement horizontal déplace le contour seul.
+- Minimap limitée aux pans : sols et escaliers retirés du rendu et du calcul de cadrage. La position des murs, le filtre de niveau et le clic de cadrage sont conservés.
+- Les ancres héritées inchangées restent conservées avec un avertissement dans leurs propriétés. Réparer un support ne force pas le déplacement d’une autre ancre héritée inchangée, mais ne peut pas invalider une fixation valide.
+
+### Vérifications et limites
+
+- `npm test` : **135/135 réussis**, aucun skip : 66 géométrie/disposition, 27 noyau d’édition, 6 planification et 36 intégrations PostgreSQL réelles.
+- `npm run build` : tous les typechecks et compilation web réussis. Atelier d’environ 1,116 Mo brut, 299 ko gzip ; avertissement de taille Vite conservé. Aucune nouvelle dépendance.
+- `npm run setup:local` répété avec succès ; migrations et seed idempotents. Préparation E2E dédiée ajoutée et exercée, sans réinitialisation du développement.
+- Playwright final : **38/38 réussis en 3,0 min**, aucun skip : 12 parcours HTTP et 26 parcours navigateur Chromium avec WebGL. Les 35 scénarios précédents restent présents ; les cas de stock et de hiérarchie utilisent des profils de vissage direct explicites dans leurs seules fixtures.
+- Essais intermédiaires : correction de deux attentes de test (annulation avant sauvegarde, identifiant attendu après mise à jour du formulaire) et du nettoyage des seules données de test qui avait retiré le stock d’un modèle historique de fixture. Ce stock a été rétabli par la commande d’inventaire ; la campagne finale complète passe sans affaiblir les assertions de fixation.
+- Le script E2E a été exercé à la création d’une base vierge puis rejoué avec succès ; cette base de contrôle a été supprimée ensuite. Il refuse aussi un stock de fixture incomplet ou des occupations actives, sans les réinitialiser.
+- Serveur local habituel redémarré. Chargement de l’atelier, sélection du sol et exemple de catalogue vérifiés sans enregistrement serveur ni erreur JavaScript. Captures actuelles : `poc-editor.png`, `poc-levels.png`, `poc-pyramid.png` dans docs/assets.
+- Recherche du nombre minimal de vis et d’un exemple constructeur **incomplète** : huit nouveaux essais bloqués par le proxy HTTPS 403. Aucune notice ou image fournisseur reçue ; aucun montage partiel ni profil constructeur revendiqué. Le détail figure dans fixations.md et research.md. La pyramide fournie reste un exemple pédagogique.
+
+Le point de retour avant ce complément est `6a38270`. La cible de livraison reste `poc/climbed-3d`, sans déploiement externe.

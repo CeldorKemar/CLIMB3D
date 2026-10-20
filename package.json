@@ -14,6 +14,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:prepare": "tsx scripts/prepare-e2e.ts",
     "setup:local": "node scripts/local-setup.mjs",
     "db:migrate": "npm run db:migrate -w @climbed/api",
     "db:seed": "npm run db:seed -w @climbed/api"

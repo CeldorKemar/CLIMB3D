@@ -109,3 +109,9 @@ Les objectifs chiffrés de performance, détails des permissions sensibles et ch
 - Une minimap projette les pans réels sur XZ, avec inclinaison, orientation et épaisseur, sans les réarranger. Elle se masque, s’agrandit, filtre les niveaux et cadre le pan cliqué dans l’éditeur.
 - La salle possède des sols finis associés à des niveaux nommés et une altitude en mètres. Changer l’altitude transporte les pans associés et leurs enfants. Des escaliers droits relient deux niveaux ; sauvegarde, rechargement et historique conservent ces données.
 - Les trous de fixation propres aux prises et volumes sont réellement traversants. Boulonnage sur inserts compatibles, vissage sur surfaces autorisées et aperçu vert/rouge sont contrôlés par des règles partagées avec l’API. Les données fabricant restent à documenter ; les exemples du POC ne les remplacent pas.
+
+## Complément : fixations complètes et déplacement de structure
+
+Toutes les fixations déclarées du modèle sont obligatoires. En mode prépercé, les vis exigent des trous pilotes compatibles et les boulons des inserts compatibles, sans partager le même point récepteur. Le vissage direct est une capacité explicite du profil, soumise à l’autorisation du support. Aucune estimation de stabilité à une ou deux vis n’est affirmée sans données constructeur. La recherche externe reste bloquée ; les exemples de pyramide à inserts et dôme à quatre boulons sont synthétiques.
+
+Pans et sols sélectionnés se déplacent par flèches ou boutons X/Y/Z avec pas réglable ; les commandes de texte restent préservées. La translation verticale d’un sol transporte les pans de son niveau, la translation horizontale déplace son contour seul. La minimap représente uniquement les murs.

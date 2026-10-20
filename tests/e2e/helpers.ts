@@ -28,6 +28,7 @@ export async function enterWorkshop(page: Page, options: { reuseSession?: boolea
 }
 
 export async function confirmSave(page: Page) {
+  await expect(page.getByTestId('scene-save')).toBeEnabled();
   const saved = page.waitForResponse(value => value.url().includes('/scene') && value.request().method() === 'PUT');
   await page.getByTestId('scene-save').click();
   const response = await saved;

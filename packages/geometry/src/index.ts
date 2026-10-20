@@ -7,7 +7,7 @@ import {
   Matrix4, Path, Quaternion, Shape, Triangle, Vector3,
 } from 'three';
 import { detectSolidContacts, type CollisionPair, type CollisionSolid } from './collisions';
-import { getMountingHoles, getSupportFixings, mountingFingerprint, validatePlacementMounting } from './mounting';
+import { getMountingHoles, getSupportFixings, mountingFingerprint, mountingObjectFingerprint, validatePlacementMounting } from './mounting';
 import { perforateGeometry } from './perforation';
 import { validateRoomLayout } from './layout';
 export * from './mounting';
@@ -592,7 +592,12 @@ export function validateSceneChange(previous: SceneDocument, next: SceneDocument
   for (const placement of next.placements) {
     const previousPlacement = oldPlacements.get(placement.id);
     if (!previousPlacement || mountingFingerprint(previous, previousPlacement) !== mountingFingerprint(next, placement)) {
-      errors.push(...validatePlacementMounting(next, placement));
+      const nextErrors = validatePlacementMounting(next, placement);
+      // Support repairs may retain an unchanged legacy defect, but never invalidate
+      // a previously valid fixing or excuse a moved object/model.
+      const oldErrors = previousPlacement && mountingObjectFingerprint(previous, previousPlacement) === mountingObjectFingerprint(next, placement)
+        ? new Set(validatePlacementMounting(previous, previousPlacement)) : new Set<string>();
+      errors.push(...nextErrors.filter(error => !oldErrors.has(error)));
     }
   }
   const oldPairs = new Set(findSceneCollisions(previous).map(key));
